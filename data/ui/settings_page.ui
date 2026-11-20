@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="AdwPreferencesPage" id="settings_page">
+    <property name="title">Settings</property>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Behavior</property>
+        <property name="description">Applies to the daemon and every screen it manages</property>
+        <child>
+          <object class="AdwSwitchRow" id="autostart_switch">
+            <property name="title">Start screens at login</property>
+            <property name="subtitle">Starts the default preset when the daemon launches</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSwitchRow" id="notifications_switch">
+            <property name="title">Notifications</property>
+            <property name="subtitle">Portal approval prompts, connects and failures</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSpinRow" id="idle_spin">
+            <property name="title">Stop screens when idle</property>
+            <property name="subtitle">Minutes without a connected client; 0 disables</property>
+            <property name="adjustment">
+              <object class="GtkAdjustment">
+                <property name="lower">0</property>
+                <property name="upper">240</property>
+                <property name="step-increment">1</property>
+                <property name="page-increment">10</property>
+              </object>
+            </property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwSwitchRow" id="restore_layout_switch">
+            <property name="title">Restore the desktop layout on stop</property>
+            <property name="subtitle">Puts physical monitors back where they were before streaming</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Screens</property>
+        <property name="description">Only one stream can carry audio</property>
+        <child>
+          <object class="AdwActionRow" id="default_preset_row">
+            <property name="title">Default preset</property>
+            <property name="subtitle">Started by the header button and at login</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow" id="audio_row">
+            <property name="title">Audio screen</property>
+            <property name="subtitle">Disabled while any screen is streaming</property>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="AdwPreferencesGroup">
+        <property name="title">Maintenance</property>
+        <child>
+          <object class="AdwActionRow" id="extension_row">
+            <property name="title">GNOME Shell extension</property>
+            <property name="subtitle">Quick Settings control; log out and back in once after installing</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow" id="daemon_row">
+            <property name="title">Longcar daemon</property>
+            <property name="subtitle">Restart to pick up a new Sunshine or DisplayConfig state</property>
+          </object>
+        </child>
+        <child>
+          <object class="AdwActionRow" id="logs_row">
+            <property name="title">Logs</property>
+            <property name="subtitle">Daemon and per-screen Sunshine logs, secrets redacted</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

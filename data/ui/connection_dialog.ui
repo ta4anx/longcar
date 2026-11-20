@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="AdwDialog" id="connection_dialog">
+    <property name="title">Connection info</property>
+    <property name="content-width">480</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="title-widget">
+              <object class="GtkLabel" id="connection_title">
+                <property name="label">Connect</property>
+                <property name="css-classes">title-4</property>
+              </object>
+            </property>
+            <child type="end">
+              <object class="GtkButton" id="close_button">
+                <property name="label">Close</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">14</property>
+            <property name="margin-top">18</property>
+            <property name="margin-bottom">18</property>
+            <property name="margin-start">18</property>
+            <property name="margin-end">18</property>
+            <child>
+              <object class="AdwPreferencesGroup">
+                <property name="title">Address</property>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title">Host address</property>
+                    <child type="suffix">
+                      <object class="GtkBox">
+                        <property name="spacing">6</property>
+                        <property name="valign">center</property>
+                        <child>
+                          <object class="GtkLabel" id="address_value">
+                            <property name="label">127.0.0.1</property>
+                            <property name="selectable">true</property>
+                            <property name="css-classes">longcar-mono</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="copy_address_button">
+                            <property name="icon-name">edit-copy-symbolic</property>
+                            <property name="tooltip-text">Copy the host address</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title">Host and port</property>
+                    <child type="suffix">
+                      <object class="GtkBox">
+                        <property name="spacing">6</property>
+                        <property name="valign">center</property>
+                        <child>
+                          <object class="GtkLabel" id="endpoint_value">
+                            <property name="label">127.0.0.1:48049</property>
+                            <property name="selectable">true</property>
+                            <property name="css-classes">longcar-mono</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="copy_endpoint_button">
+                            <property name="icon-name">edit-copy-symbolic</property>
+                            <property name="tooltip-text">Copy host and port</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwPreferencesGroup">
+                <property name="title">Recommended client settings</property>
+                <child>
+                  <object class="GtkLabel" id="recommendation_value">
+                    <property name="label">Use stock Moonlight with HEVC at the screen's resolution</property>
+                    <property name="xalign">0</property>
+                    <property name="wrap">true</property>
+                    <property name="margin-top">6</property>
+                    <property name="margin-bottom">6</property>
+                    <property name="margin-start">12</property>
+                    <property name="margin-end">12</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label">The virtual monitor is fullscreen inside Moonlight; it extends this GNOME desktop rather than the client's own display topology.</property>
+                <property name="xalign">0</property>
+                <property name="wrap">true</property>
+                <property name="css-classes">dim-label</property>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </property>
+  </object>
+</interface>

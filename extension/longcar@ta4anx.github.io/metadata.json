@@ -1,0 +1,8 @@
+{
+  "uuid": "longcar@ta4anx.github.io",
+  "name": "Longcar",
+  "description": "Control Longcar virtual displays and Sunshine streams from Quick Settings.",
+  "shell-version": ["50"],
+  "version-name": "0.1.0",
+  "url": "https://github.com/ta4anx/longcar"
+}

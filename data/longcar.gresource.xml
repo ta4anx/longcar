@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/io/github/ta4anx/Longcar">
+    <file>style.css</file>
+    <file>ui/window.ui</file>
+    <file>ui/screens_page.ui</file>
+    <file>ui/screen_dialog.ui</file>
+    <file>ui/presets_page.ui</file>
+    <file>ui/devices_page.ui</file>
+    <file>ui/pair_dialog.ui</file>
+    <file>ui/network_page.ui</file>
+    <file>ui/activity_page.ui</file>
+    <file>ui/doctor_page.ui</file>
+    <file>ui/settings_page.ui</file>
+    <file>ui/onboarding_dialog.ui</file>
+    <file>ui/connection_dialog.ui</file>
+    <file>ui/logs_dialog.ui</file>
+  </gresource>
+</gresources>

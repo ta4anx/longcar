@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Longcar theme additions. Only libadwaita named colors, so light and dark both work. */
+
+.longcar-state-off {
+  color: @insensitive_fg_color;
+}
+
+.longcar-state-active {
+  color: @accent_color;
+}
+
+.longcar-state-error {
+  color: @destructive_color;
+}
+
+.longcar-mono {
+  font-family: monospace;
+}
+
+.layout-preview {
+  background-color: @card_bg_color;
+  border-radius: 12px;
+}

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="GtkBox" id="presets_page">
+    <property name="orientation">vertical</property>
+    <property name="vexpand">true</property>
+    <child>
+      <object class="GtkScrolledWindow">
+        <property name="hscrollbar-policy">never</property>
+        <property name="vexpand">true</property>
+        <property name="child">
+          <object class="AdwClamp">
+            <property name="maximum-size">780</property>
+            <property name="tightening-threshold">640</property>
+            <property name="child">
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">18</property>
+                <property name="margin-top">18</property>
+                <property name="margin-bottom">24</property>
+                <property name="margin-start">18</property>
+                <property name="margin-end">18</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">12</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">Presets</property>
+                        <property name="xalign">0</property>
+                        <property name="hexpand">true</property>
+                        <property name="css-classes">title-1</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="new_preset_button">
+                        <property name="icon-name">list-add-symbolic</property>
+                        <property name="tooltip-text">Create a preset</property>
+                        <property name="valign">center</property>
+                        <property name="css-classes">suggested-action</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Screen sets</property>
+                    <property name="description">A preset starts several screens together and becomes the default for the header button</property>
+                    <child>
+                      <object class="GtkListBox" id="presets_list">
+                        <property name="selection-mode">none</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </child>
+  </object>
+</interface>

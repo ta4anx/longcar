@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Longcar
+Comment=Virtual displays for Sunshine and Moonlight
+Exec=longcar
+Icon=io.github.ta4anx.Longcar
+Terminal=false
+Type=Application
+Categories=GNOME;GTK;Network;RemoteAccess;
+Keywords=stream;virtual;display;sunshine;moonlight;tablet;
+StartupNotify=true
+StartupWMClass=io.github.ta4anx.Longcar

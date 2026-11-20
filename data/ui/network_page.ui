@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="GtkBox" id="network_page">
+    <property name="orientation">vertical</property>
+    <property name="vexpand">true</property>
+    <child>
+      <object class="GtkScrolledWindow">
+        <property name="hscrollbar-policy">never</property>
+        <property name="vexpand">true</property>
+        <property name="child">
+          <object class="AdwClamp">
+            <property name="maximum-size">780</property>
+            <property name="tightening-threshold">640</property>
+            <property name="child">
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">18</property>
+                <property name="margin-top">18</property>
+                <property name="margin-bottom">24</property>
+                <property name="margin-start">18</property>
+                <property name="margin-end">18</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">Network</property>
+                    <property name="xalign">0</property>
+                    <property name="css-classes">title-1</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Host addresses</property>
+                    <property name="description">Clients connect to one of these addresses on the session's local network</property>
+                    <child>
+                      <object class="GtkListBox" id="address_list">
+                        <property name="selection-mode">none</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Ports per screen</property>
+                    <property name="description">Every screen owns a 60-port block derived from its slot</property>
+                    <child>
+                      <object class="GtkBox" id="port_list">
+                        <property name="orientation">vertical</property>
+                        <property name="margin-top">6</property>
+                        <property name="margin-bottom">6</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">8</property>
+                    <child>
+                      <object class="GtkBox">
+                        <property name="spacing">8</property>
+                        <child>
+                          <object class="GtkLabel">
+                            <property name="label">Firewall rules (ufw)</property>
+                            <property name="xalign">0</property>
+                            <property name="hexpand">true</property>
+                            <property name="css-classes">heading</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="copy_firewall_button">
+                            <property name="icon-name">edit-copy-symbolic</property>
+                            <property name="tooltip-text">Copy the firewall commands</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkFrame">
+                        <child>
+                          <object class="GtkScrolledWindow">
+                            <property name="height-request">130</property>
+                            <property name="hscrollbar-policy">never</property>
+                            <property name="child">
+                              <object class="GtkTextView" id="firewall_text">
+                                <property name="editable">false</property>
+                                <property name="cursor-visible">false</property>
+                                <property name="top-margin">8</property>
+                                <property name="bottom-margin">8</property>
+                                <property name="left-margin">8</property>
+                                <property name="right-margin">8</property>
+                                <property name="wrap-mode">char</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Nearby Sunshine hosts</property>
+                    <property name="description">Idle Moonlight clients do not advertise; only Sunshine hosts and pairing clients appear</property>
+                    <child>
+                      <object class="GtkListBox" id="discovered_list">
+                        <property name="selection-mode">none</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Scan mDNS</property>
+                        <property name="subtitle">Browses _nvstream._tcp.local for three seconds</property>
+                        <child type="suffix">
+                          <object class="GtkButton" id="discover_button">
+                            <property name="label">Discover</property>
+                            <property name="tooltip-text">Look for Sunshine hosts on the local network</property>
+                            <property name="valign">center</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Router latency</property>
+                    <property name="description">Ten ICMP pings to the default gateway show Wi-Fi stability</property>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Ping the default gateway</property>
+                        <child type="suffix">
+                          <object class="GtkButton" id="latency_button">
+                            <property name="label">Measure</property>
+                            <property name="tooltip-text">Ping the default gateway ten times</property>
+                            <property name="valign">center</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel" id="latency_result">
+                        <property name="label">Not measured yet</property>
+                        <property name="xalign">0</property>
+                        <property name="wrap">true</property>
+                        <property name="margin-top">6</property>
+                        <property name="margin-bottom">6</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="css-classes">dim-label</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </child>
+  </object>
+</interface>

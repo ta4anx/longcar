@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="AdwApplicationWindow" id="window">
+    <property name="title">Longcar</property>
+    <property name="default-width">1120</property>
+    <property name="default-height">780</property>
+    <property name="content">
+      <object class="AdwToastOverlay" id="toast_overlay">
+        <property name="child">
+          <object class="AdwToolbarView">
+            <child type="top">
+              <object class="AdwHeaderBar" id="header">
+                <child type="start">
+                  <object class="GtkMenuButton" id="app_menu_button">
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="tooltip-text">Application menu</property>
+                  </object>
+                </child>
+                <child type="end">
+                  <object class="GtkMenuButton" id="start_button">
+                    <property name="primary">true</property>
+                    <property name="always-show-arrow">true</property>
+                    <property name="icon-name">media-playback-start-symbolic</property>
+                    <property name="tooltip-text">Start a preset or all screens</property>
+                    <property name="popover">
+                      <object class="GtkPopover">
+                        <property name="child">
+                          <object class="GtkBox" id="start_popover_box">
+                            <property name="orientation">vertical</property>
+                            <property name="spacing">2</property>
+                            <property name="margin-top">6</property>
+                            <property name="margin-bottom">6</property>
+                            <property name="margin-start">6</property>
+                            <property name="margin-end">6</property>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child type="top">
+              <object class="AdwBanner" id="warning_banner">
+                <property name="title">Warning</property>
+                <property name="revealed">false</property>
+              </object>
+            </child>
+            <property name="content">
+              <object class="AdwNavigationSplitView" id="split_view">
+                <property name="min-sidebar-width">210</property>
+                <property name="max-sidebar-width">230</property>
+                <property name="sidebar">
+                  <object class="AdwNavigationPage">
+                    <property name="title">Longcar</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="child">
+                          <object class="GtkListBox" id="sidebar">
+                            <property name="selection-mode">single</property>
+                            <property name="margin-top">6</property>
+                            <property name="margin-bottom">6</property>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">video-display-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Screens</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">view-grid-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Presets</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">tv-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Devices</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">network-wireless-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Network</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">utilities-system-monitor-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Activity</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">dialog-information-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Doctor</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkListBoxRow">
+                                <property name="child">
+                                  <object class="GtkBox">
+                                    <property name="spacing">12</property>
+                                    <property name="margin-top">9</property>
+                                    <property name="margin-bottom">9</property>
+                                    <property name="margin-start">12</property>
+                                    <property name="margin-end">12</property>
+                                    <child>
+                                      <object class="GtkImage">
+                                        <property name="icon-name">preferences-system-symbolic</property>
+                                      </object>
+                                    </child>
+                                    <child>
+                                      <object class="GtkLabel">
+                                        <property name="label">Settings</property>
+                                        <property name="xalign">0</property>
+                                      </object>
+                                    </child>
+                                  </object>
+                                </property>
+                              </object>
+                            </child>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </property>
+                <property name="content">
+                  <object class="AdwNavigationPage">
+                    <property name="title">Longcar</property>
+                    <property name="child">
+                      <object class="GtkStack" id="page_stack">
+                        <property name="transition-type">crossfade</property>
+                        <property name="vexpand">true</property>
+                      </object>
+                    </property>
+                  </object>
+                </property>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </object>
+</interface>

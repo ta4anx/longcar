@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="AdwDialog" id="screen_dialog">
+    <property name="title">New screen</property>
+    <property name="content-width">560</property>
+    <property name="content-height">700</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="title-widget">
+              <object class="GtkLabel" id="dialog_title">
+                <property name="label">New screen</property>
+                <property name="css-classes">title-4</property>
+              </object>
+            </property>
+            <child type="start">
+              <object class="GtkButton" id="cancel_button">
+                <property name="label">Cancel</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkButton" id="save_button">
+                <property name="label">Save</property>
+                <property name="css-classes">suggested-action</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkScrolledWindow">
+            <property name="hscrollbar-policy">never</property>
+            <property name="child">
+              <object class="AdwPreferencesPage">
+                <property name="title">Screen</property>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Display</property>
+                    <child>
+                      <object class="AdwEntryRow" id="name_entry">
+                        <property name="title">Name</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Resolution</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="resolution_preset">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>2560 × 1600</item>
+                                  <item>2560 × 1440</item>
+                                  <item>1920 × 1200</item>
+                                  <item>1920 × 1080</item>
+                                  <item>1280 × 800</item>
+                                  <item>1080 × 2400</item>
+                                  <item>Custom</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Custom width</property>
+                        <child type="suffix">
+                          <object class="GtkSpinButton" id="width_spin">
+                            <property name="valign">center</property>
+                            <property name="digits">0</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">640</property>
+                                <property name="upper">7680</property>
+                                <property name="step-increment">2</property>
+                                <property name="page-increment">100</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Custom height</property>
+                        <child type="suffix">
+                          <object class="GtkSpinButton" id="height_spin">
+                            <property name="valign">center</property>
+                            <property name="digits">0</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">640</property>
+                                <property name="upper">7680</property>
+                                <property name="step-increment">2</property>
+                                <property name="page-increment">100</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Refresh rate</property>
+                        <property name="subtitle">Hz</property>
+                        <child type="suffix">
+                          <object class="GtkSpinButton" id="refresh_spin">
+                            <property name="valign">center</property>
+                            <property name="digits">2</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">24</property>
+                                <property name="upper">240</property>
+                                <property name="step-increment">1</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Scale</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="scale_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>0.5</item>
+                                  <item>0.75</item>
+                                  <item>1.0</item>
+                                  <item>1.25</item>
+                                  <item>1.5</item>
+                                  <item>1.75</item>
+                                  <item>2.0</item>
+                                  <item>2.5</item>
+                                  <item>3.0</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Placement</property>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Position</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="position_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Left</item>
+                                  <item>Right</item>
+                                  <item>Above</item>
+                                  <item>Below</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Relative to</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="relative_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Primary monitor</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Alignment</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="alignment_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Start</item>
+                                  <item>Center</item>
+                                  <item>End</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Port slot</property>
+                        <property name="subtitle">0–7; determines the port block</property>
+                        <child type="suffix">
+                          <object class="GtkSpinButton" id="slot_spin">
+                            <property name="valign">center</property>
+                            <property name="digits">0</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">0</property>
+                                <property name="upper">7</property>
+                                <property name="step-increment">1</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Streaming</property>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Encoder</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="encoder_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Auto</item>
+                                  <item>VAAPI</item>
+                                  <item>NVENC</item>
+                                  <item>Vulkan</item>
+                                  <item>Software</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">HEVC</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="hevc_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Auto</item>
+                                  <item>Off</item>
+                                  <item>Main</item>
+                                  <item>Main 10</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">AV1</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="av1_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Auto</item>
+                                  <item>Off</item>
+                                  <item>Main</item>
+                                  <item>Main 10</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Max bitrate</property>
+                        <property name="subtitle">kbps; 0 leaves it to Sunshine</property>
+                        <child type="suffix">
+                          <object class="GtkSpinButton" id="bitrate_spin">
+                            <property name="valign">center</property>
+                            <property name="digits">0</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">0</property>
+                                <property name="upper">200000</property>
+                                <property name="step-increment">1000</property>
+                                <property name="page-increment">5000</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwEntryRow" id="max_resolution_entry">
+                        <property name="title">Max resolution (WxH, empty for the screen size)</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Cursor</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="cursor_dropdown">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Hidden</item>
+                                  <item>Embedded</item>
+                                  <item>Metadata</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <child>
+                      <object class="GtkLabel" id="error_label">
+                        <property name="xalign">0</property>
+                        <property name="wrap">true</property>
+                        <property name="visible">false</property>
+                        <property name="css-classes">error</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </object>
+</interface>

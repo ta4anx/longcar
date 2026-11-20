@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ta4anx.Longcar</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Longcar</name>
+  <summary>Virtual displays for Sunshine and Moonlight</summary>
+  <description>
+    <p>
+      Longcar extends your GNOME desktop onto a tablet or phone by creating virtual
+      displays with Mutter's ScreenCast API, running one isolated stock Sunshine
+      instance per screen, and streaming each one to a Moonlight or Artemis client.
+    </p>
+    <p>
+      Manage screens, presets, pairing, codec and bitrate caps, network discovery and
+      recovery from the app, the command line, or a Quick Settings toggle in the GNOME
+      top panel.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.ta4anx.Longcar.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/main.png</image>
+      <caption>Screens with the virtual layout preview</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/doctor.png</image>
+      <caption>Doctor checks for the session, Sunshine and ports</caption>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/ta4anx/longcar</url>
+  <url type="bugtracker">https://github.com/ta4anx/longcar/issues</url>
+  <developer id="io.github.ta4anx">
+    <name>Kaan Çakmak</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-21">
+      <description>
+        <p>First release: virtual display management, per-screen Sunshine instances, presets, pairing, Quick Settings control.</p>
+      </description>
+    </release>
+  </releases>
+</component>

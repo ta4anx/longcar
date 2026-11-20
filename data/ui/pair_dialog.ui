@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="AdwDialog" id="pair_dialog">
+    <property name="title">Pair device</property>
+    <property name="content-width">420</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="title-widget">
+              <object class="GtkLabel" id="pair_title">
+                <property name="label">Pair device</property>
+                <property name="css-classes">title-4</property>
+              </object>
+            </property>
+            <child type="start">
+              <object class="GtkButton" id="cancel_button">
+                <property name="label">Cancel</property>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkButton" id="pair_button">
+                <property name="label">Pair</property>
+                <property name="css-classes">suggested-action</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">12</property>
+            <property name="margin-top">18</property>
+            <property name="margin-bottom">18</property>
+            <property name="margin-start">18</property>
+            <property name="margin-end">18</property>
+            <child>
+              <object class="GtkLabel" id="pair_subtitle">
+                <property name="label">Enter the PIN shown on the client</property>
+                <property name="xalign">0</property>
+                <property name="wrap">true</property>
+                <property name="css-classes">dim-label</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkEntry" id="pin_entry">
+                <property name="placeholder-text">4-digit PIN</property>
+                <property name="max-length">4</property>
+                <property name="input-purpose">number</property>
+                <property name="activates-default">true</property>
+                <property name="xalign">0.5</property>
+                <property name="css-classes">longcar-mono</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel" id="pair_error">
+                <property name="xalign">0</property>
+                <property name="wrap">true</property>
+                <property name="visible">false</property>
+                <property name="css-classes">error</property>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </property>
+  </object>
+</interface>

@@ -1,0 +1,7 @@
+target/
+.dev/
+build/
+*.deb
+*.zip
+*.log
+docs/screenshots/*.tmp

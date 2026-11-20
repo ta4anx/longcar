@@ -1,0 +1,62 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-pipewire gstreamer1.0-gtk4 \
+            gnome-shell desktop-file-utils libxml2-utils appstream \
+            zip unzip
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --workspace
+
+      - name: Build extension
+        run: ./scripts/build-extension.sh
+
+      - name: Validate metainfo
+        run: |
+          if command -v appstreamcli >/dev/null 2>&1; then
+            appstreamcli validate --no-net data/io.github.ta4anx.Longcar.metainfo.xml
+          else
+            echo "appstreamcli not available, skipping"
+          fi
+
+      - name: Validate desktop entry
+        run: desktop-file-validate data/io.github.ta4anx.Longcar.desktop
+
+      - name: Build Debian package
+        run: ./scripts/build-deb.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: longcar-artifacts
+          path: |
+            build/*.deb
+            build/*.zip
+            build/SHA256SUMS

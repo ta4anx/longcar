@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="AdwDialog" id="onboarding_dialog">
+    <property name="title">Set up Longcar</property>
+    <property name="content-width">560</property>
+    <property name="content-height">700</property>
+    <property name="can-close">true</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="title-widget">
+              <object class="GtkLabel">
+                <property name="label">Welcome to Longcar</property>
+                <property name="css-classes">title-4</property>
+              </object>
+            </property>
+            <child type="end">
+              <object class="GtkButton" id="later_button">
+                <property name="label">Not now</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child type="bottom">
+          <object class="GtkBox">
+            <property name="halign">end</property>
+            <property name="margin-top">12</property>
+            <property name="margin-bottom">12</property>
+            <property name="margin-start">12</property>
+            <property name="margin-end">12</property>
+            <child>
+              <object class="GtkButton" id="finish_button">
+                <property name="label">Finish setup</property>
+                <property name="css-classes">suggested-action</property>
+                <property name="tooltip-text">Create the selected screens and finish onboarding</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <property name="content">
+          <object class="GtkScrolledWindow">
+            <property name="hscrollbar-policy">never</property>
+            <property name="child">
+              <object class="AdwPreferencesPage">
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Tablet screen</property>
+                    <property name="description">Pick the resolution Moonlight should request; the virtual monitor is created at this size</property>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Resolution</property>
+                        <child type="suffix">
+                          <object class="GtkDropDown" id="tablet_resolution">
+                            <property name="valign">center</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>2560 × 1600</item>
+                                  <item>1920 × 1200</item>
+                                  <item>1280 × 800</item>
+                                  <item>Custom</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="custom_size_box">
+                        <property name="orientation">horizontal</property>
+                        <property name="spacing">12</property>
+                        <property name="margin-top">6</property>
+                        <property name="margin-bottom">6</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <child>
+                          <object class="GtkSpinButton" id="tablet_width">
+                            <property name="hexpand">true</property>
+                            <property name="digits">0</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">640</property>
+                                <property name="upper">7680</property>
+                                <property name="step-increment">2</property>
+                                <property name="page-increment">100</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkLabel">
+                            <property name="label">×</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkSpinButton" id="tablet_height">
+                            <property name="hexpand">true</property>
+                            <property name="digits">0</property>
+                            <property name="numeric">true</property>
+                            <property name="adjustment">
+                              <object class="GtkAdjustment">
+                                <property name="lower">640</property>
+                                <property name="upper">7680</property>
+                                <property name="step-increment">2</property>
+                                <property name="page-increment">100</property>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Phone</property>
+                    <child>
+                      <object class="AdwSwitchRow" id="add_phone">
+                        <property name="title">Add a portrait phone screen</property>
+                        <property name="subtitle">1080 × 2400 at 90 Hz; requires Artemis, because stock Moonlight locks regular phones to landscape</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">System check</property>
+                    <property name="description">Longcar needs GNOME 50 Wayland, Sunshine and fractional scaling</property>
+                    <child>
+                      <object class="GtkLabel" id="doctor_summary">
+                        <property name="label">Run the checks before finishing</property>
+                        <property name="xalign">0</property>
+                        <property name="wrap">true</property>
+                        <property name="margin-top">6</property>
+                        <property name="margin-bottom">6</property>
+                        <property name="margin-start">12</property>
+                        <property name="margin-end">12</property>
+                        <property name="css-classes">dim-label</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwActionRow">
+                        <property name="title">Check this workstation</property>
+                        <child type="suffix">
+                          <object class="GtkButton" id="check_doctor_button">
+                            <property name="label">Run checks</property>
+                            <property name="valign">center</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <child>
+                      <object class="AdwSwitchRow" id="start_all">
+                        <property name="title">Start screens when setup finishes</property>
+                        <property name="subtitle">GNOME asks you to approve each virtual monitor once</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </property>
+  </object>
+</interface>

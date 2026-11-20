@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+.longcar-menu-header {
+    font-weight: bold;
+}
+
+.longcar-state-error {
+    color: #ff7b63;
+}
+
+.longcar-state-waiting {
+    color: #f5c211;
+}
+
+.longcar-state-pending {
+    color: #c0bfbc;
+}
+
+.longcar-state-ready {
+    color: #8ff0a4;
+}
+
+.longcar-state-live {
+    color: #62a0ea;
+    font-weight: bold;
+}

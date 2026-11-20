@@ -1,0 +1,14 @@
+[Unit]
+Description=Longcar virtual display daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=io.github.ta4anx.Longcar.Daemon
+ExecStart=/usr/libexec/longcar-daemon
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

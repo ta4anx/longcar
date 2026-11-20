@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/longcar-core",
+    "crates/longcar-display",
+    "crates/longcar-daemon",
+    "crates/longcar-gui",
+    "crates/longcar-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/ta4anx/longcar"
+
+[workspace.dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+futures-util = "0.3"
+gstreamer = { version = "0.25", features = ["v1_22"] }
+if-addrs = "0.15"
+libc = "0.2"
+mdns-sd = "0.22"
+notify-rust = "4"
+rand = "0.9"
+regex = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls-vendored"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "time", "sync", "signal"] }
+toml = "0.9"
+uuid = { version = "1", features = ["v4"] }
+zbus = { version = "6", features = ["tokio"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }

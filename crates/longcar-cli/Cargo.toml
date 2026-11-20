@@ -1,0 +1,21 @@
+[package]
+name = "longcar-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "longcarctl"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+longcar-core = { path = "../longcar-core" }
+serde_json.workspace = true
+tokio.workspace = true
+zbus.workspace = true
+
+[lints]
+workspace = true

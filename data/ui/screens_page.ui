@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.22"/>
+  <requires lib="Adw" version="1.9"/>
+  <object class="GtkBox" id="screens_page">
+    <property name="orientation">vertical</property>
+    <property name="vexpand">true</property>
+    <child>
+      <object class="GtkScrolledWindow">
+        <property name="hscrollbar-policy">never</property>
+        <property name="vexpand">true</property>
+        <property name="child">
+          <object class="AdwClamp">
+            <property name="maximum-size">780</property>
+            <property name="tightening-threshold">640</property>
+            <property name="child">
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">18</property>
+                <property name="margin-top">18</property>
+                <property name="margin-bottom">24</property>
+                <property name="margin-start">18</property>
+                <property name="margin-end">18</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="spacing">12</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">Screens</property>
+                        <property name="xalign">0</property>
+                        <property name="hexpand">true</property>
+                        <property name="css-classes">title-1</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkButton" id="add_screen_button">
+                        <property name="icon-name">list-add-symbolic</property>
+                        <property name="tooltip-text">Add a virtual screen</property>
+                        <property name="valign">center</property>
+                        <property name="css-classes">suggested-action</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox" id="preview_slot">
+                    <property name="orientation">vertical</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwPreferencesGroup">
+                    <property name="title">Virtual screens</property>
+                    <property name="description">Virtual displays extend the GNOME desktop; each one streams through its own Sunshine instance</property>
+                    <child>
+                      <object class="GtkListBox" id="screens_list">
+                        <property name="selection-mode">none</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">Start a screen and approve its virtual monitor in GNOME's screen picker once. Stopping a screen restores the previous desktop layout.</property>
+                    <property name="wrap">true</property>
+                    <property name="xalign">0</property>
+                    <property name="css-classes">dim-label</property>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </child>
+  </object>
+</interface>

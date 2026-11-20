@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.ta4anx.Longcar.Daemon
+Exec=/usr/libexec/longcar-daemon
+SystemdService=longcar-daemon.service
