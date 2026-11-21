@@ -54,6 +54,8 @@ pub trait DaemonControl {
     fn unpair(&self, screen_id: &str, uuid: &str) -> zbus::Result<()>;
     fn set_client_enabled(&self, screen_id: &str, uuid: &str, enabled: bool) -> zbus::Result<()>;
     fn discover_hosts(&self) -> zbus::Result<String>;
+    fn start_speed_test(&self) -> zbus::Result<String>;
+    fn stop_speed_test(&self) -> zbus::Result<()>;
     fn get_history(&self, limit: u32) -> zbus::Result<String>;
     fn get_logs(&self, limit: u32) -> zbus::Result<String>;
     fn get_doctor(&self) -> zbus::Result<String>;
@@ -236,6 +238,12 @@ impl Client {
     }
     pub async fn discover_hosts(&self) -> Result<String, String> {
         self.proxy.discover_hosts().await.map_err(err_str)
+    }
+    pub async fn start_speed_test(&self) -> Result<String, String> {
+        self.proxy.start_speed_test().await.map_err(err_str)
+    }
+    pub async fn stop_speed_test(&self) -> Result<(), String> {
+        self.proxy.stop_speed_test().await.map_err(err_str)
     }
     pub async fn get_history(&self, limit: u32) -> Result<String, String> {
         self.proxy.get_history(limit).await.map_err(err_str)

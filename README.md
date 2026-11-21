@@ -123,6 +123,19 @@ Toggle **Longcar** to start the default preset (off stops every screen). Open th
 Everything the menu does is also a D-Bus method the app uses — nothing is emulated in the
 Shell, so the tile shows exactly the daemon's state.
 
+## Network
+
+<img src="docs/screenshots/network.png" alt="Network page with the host Wi-Fi link and the speed test">
+
+**Host Wi-Fi link** reads the host's own `iw` link (SSID, signal with a quality phrase,
+negotiated rx/tx rate, channel and width) so you can tell a bad access point from a bad
+client. **Device speed test** measures the real path: it opens a 120 s, token-gated listener
+and shows a URL to open on the tablet — the page downloads 64 MiB, uploads 16 MiB and reports
+both rates back. The result is stored in state and compared with the bitrate your active
+screens ask for. A great result with a stuttering stream points at airtime or UDP loss, not
+bandwidth; the wiki's [Network](https://github.com/ta4anx/longcar/wiki/Network) page covers
+firewall rules and how to read the numbers.
+
 ## Settings
 
 - **Behavior** — start screens at login, notifications, stop when idle, restore the
