@@ -192,6 +192,8 @@ pub fn screen_entry(
         max_bitrate_kbps: screen.max_bitrate_kbps,
         max_resolution: screen.max_resolution.clone(),
         cursor: screen.cursor,
+        audio: screen.audio,
+        touch: screen.touch,
         logical,
         connector,
         node_id,
@@ -218,8 +220,12 @@ pub fn preset_entries(config: &Config) -> Vec<PresetEntry> {
 }
 
 /// Settings as published in the state document.
+///
+/// `audioScreen` is the legacy single-audio view: the first screen that streams audio.
 pub fn settings_entry(config: &Config) -> SettingsEntry {
-    SettingsEntry::from(&config.general)
+    let mut entry = SettingsEntry::from(&config.general);
+    entry.audio_screen = config.audio_screen();
+    entry
 }
 
 /// Host addresses as published in the state document.
@@ -318,6 +324,8 @@ pub fn quick_phone_screen(config: &Config) -> (ScreenConfig, Preset) {
         max_bitrate_kbps: 20000,
         max_resolution: "1080x2400".to_string(),
         cursor: CursorMode::Embedded,
+        audio: true,
+        touch: true,
     };
     let mut screens = Vec::new();
     if has_tablet {
@@ -371,6 +379,8 @@ pub fn quick_tablet_screen(config: &Config) -> (ScreenConfig, Preset) {
         max_bitrate_kbps: 30000,
         max_resolution: "2560x1600".to_string(),
         cursor: CursorMode::Embedded,
+        audio: true,
+        touch: true,
     };
     let mut screens = config
         .preset("tablet")
@@ -520,7 +530,9 @@ pub fn diff_screens(old: &ScreenConfig, new: &ScreenConfig) -> ScreenDiff {
             || old.hevc != new.hevc
             || old.av1 != new.av1
             || old.max_bitrate_kbps != new.max_bitrate_kbps
-            || old.max_resolution != new.max_resolution,
+            || old.max_resolution != new.max_resolution
+            || old.audio != new.audio
+            || old.touch != new.touch,
         slot: old.slot != new.slot,
         layout: old.position != new.position
             || old.relative_to != new.relative_to

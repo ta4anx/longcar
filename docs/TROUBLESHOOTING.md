@@ -73,6 +73,33 @@ longcarctl stop --screen tablet && longcarctl start --screen tablet
 The token is kept, so no second approval is needed. `longcarctl logs -n 200 | grep
 portalgrab` shows whether the token was saved.
 
+## A tablet shows a black screen and the decoder crashes
+
+Older tablets (Galaxy Note/Tab era) crash when the negotiated stream is more than the
+decoder supports: HEVC/AV1, a profile/level above the SoC, or Sunshine's **Vulkan** H.264
+fallback when VAAPI cannot initialise (no `/dev/dri/renderD*`).
+
+Fix in this order, per screen:
+
+1. `hevc = off`, `av1 = off` — Sunshine then offers H.264 only.
+2. `encoder = software` when `sunshine.log` says `Encoder [vaapi] failed`. The log should
+   then show `Creating encoder [libx264]` and `profile High, level 4.0, 4:2:0`.
+3. Screen mode = the tablet panel (e.g. `1280x800`), client 30 fps, 8–10 Mbps; raise later.
+4. Still crashing → 1280x720@30 → 800x600.
+
+## Audio goes to the wrong device
+
+Audio is a per-screen flag (`audio`), not a global. Turn it off on a screen to let that
+device use its own speakers; turn it on where you want the desktop mix. Two screens with
+audio on receive the same mix. Changing it restarts that screen's unit, so stop the stream
+first (or change it while the screen is only `ready`).
+
+## Touch acts like a mouse, or does nothing
+
+`touch` maps to Sunshine's `native_pen_touch`: on = real touchscreen events, off = touches
+are translated into pointer input. Apps that ignore touch want it off; GNOME itself wants
+it on. The toggle is on each screen row, in Quick Settings, and in the screen dialog.
+
 ## Two screens with the same resolution
 
 Sunshine's portal capture picks a monitor by resolution. Two virtual monitors with

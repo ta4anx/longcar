@@ -96,6 +96,9 @@ pub struct GeneralConfig {
     pub notifications: bool,
     pub stop_when_idle_minutes: u32,
     pub default_preset: String,
+    /// Deprecated: per-screen `audio` flags replaced it. Still written/read for
+    /// migration, omitted from new files.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub audio_screen: String,
     pub restore_layout_on_stop: bool,
     pub onboarding_complete: bool,
@@ -137,6 +140,17 @@ pub struct ScreenConfig {
     #[serde(alias = "maxResolution")]
     pub max_resolution: String,
     pub cursor: CursorMode,
+    /// Stream this screen's audio to the client (`stream_audio` in Sunshine).
+    #[serde(default = "default_true")]
+    pub audio: bool,
+    /// Send native pen/touch events instead of translating them to pointer input
+    /// (`native_pen_touch` in Sunshine).
+    #[serde(default = "default_true")]
+    pub touch: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl ScreenConfig {
@@ -176,12 +190,13 @@ impl Default for Config {
             max_bitrate_kbps: 30000,
             max_resolution: "2560x1600".to_string(),
             cursor: CursorMode::Embedded,
+            audio: true,
+            touch: true,
         };
         Self {
             version: CONFIG_VERSION,
             general: GeneralConfig {
                 default_preset: "tablet".to_string(),
-                audio_screen: "tablet".to_string(),
                 ..GeneralConfig::default()
             },
             presets: vec![Preset {
@@ -256,6 +271,30 @@ pub fn slugify(name: &str) -> String {
 }
 
 impl Config {
+    /// Migrate older configs: `general.audio_screen` used to pick the single screen that
+    /// carried audio. Fold it into the per-screen flags and clear it.
+    pub fn migrate(&mut self) {
+        let audio_screen = self.general.audio_screen.trim().to_string();
+        if audio_screen.is_empty() {
+            return;
+        }
+        if self.screens.iter().any(|screen| screen.id == audio_screen) {
+            for screen in &mut self.screens {
+                screen.audio = screen.id == audio_screen;
+            }
+        }
+        self.general.audio_screen.clear();
+    }
+
+    /// First screen that streams audio, for the legacy `settings.audioScreen` view.
+    pub fn audio_screen(&self) -> String {
+        self.screens
+            .iter()
+            .find(|screen| screen.audio)
+            .map(|screen| screen.id.clone())
+            .unwrap_or_default()
+    }
+
     pub fn screen(&self, id: &str) -> Option<&ScreenConfig> {
         self.screens.iter().find(|s| s.id == id)
     }
@@ -478,15 +517,19 @@ impl Config {
     pub fn load_or_create(path: &Path) -> Result<(Self, bool), ConfigError> {
         match std::fs::read_to_string(path) {
             Ok(text) => match toml::from_str::<Config>(&text) {
-                Ok(config) => match config.validate() {
-                    Ok(()) => Ok((config, false)),
-                    Err(_validation) => {
-                        quarantine(path, "invalid")?;
-                        let default = Config::default();
-                        default.save(path)?;
-                        Ok((default, true))
+                Ok(mut config) => {
+                    config.migrate();
+                    let validation = config.validate();
+                    match validation {
+                        Ok(()) => Ok((config, false)),
+                        Err(_validation) => {
+                            quarantine(path, "invalid")?;
+                            let default = Config::default();
+                            default.save(path)?;
+                            Ok((default, true))
+                        }
                     }
-                },
+                }
                 Err(_parse) => {
                     quarantine(path, "invalid")?;
                     let default = Config::default();
@@ -584,7 +627,8 @@ mod tests {
             "autostart_screens = false",
             "stop_when_idle_minutes = 0",
             "default_preset = \"tablet\"",
-            "audio_screen = \"tablet\"",
+            "audio = true",
+            "touch = true",
             "restore_layout_on_stop = true",
             "onboarding_complete = false",
             "[[screens]]",
@@ -815,6 +859,36 @@ mod tests {
         let snake = serde_json::to_string(&screen).unwrap();
         let reparsed: ScreenConfig = serde_json::from_str(&snake).unwrap();
         assert_eq!(reparsed, screen);
+    }
+
+    #[test]
+    fn migrate_folds_audio_screen_into_screen_flags() {
+        let mut config = Config::default();
+        config.general.audio_screen = "tablet".to_string();
+        let mut phone = config.screens[0].clone();
+        phone.id = "phone".to_string();
+        phone.name = "Phone".to_string();
+        phone.width = 1080;
+        phone.height = 2400;
+        phone.slot = 1;
+        config.screens.push(phone);
+        config.presets[0].screens.push("phone".to_string());
+        config.screens[0].audio = true;
+        config.screens[1].audio = true;
+
+        config.migrate();
+        assert!(config.general.audio_screen.is_empty());
+        assert!(config.screens[0].audio);
+        assert!(!config.screens[1].audio);
+        assert_eq!(config.audio_screen(), "tablet");
+        config.validate().unwrap();
+    }
+
+    #[test]
+    fn audio_screen_reports_empty_when_all_disabled() {
+        let mut config = Config::default();
+        config.screens[0].audio = false;
+        assert_eq!(config.audio_screen(), "");
     }
 
     #[test]

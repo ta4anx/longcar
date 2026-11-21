@@ -7,6 +7,7 @@ After=graphical-session.target
 Type=dbus
 BusName=io.github.ta4anx.Longcar.Daemon
 ExecStart=/usr/libexec/longcar-daemon
+TimeoutStopSec=15
 Restart=on-failure
 RestartSec=2
 

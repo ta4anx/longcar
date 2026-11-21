@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use longcar_core::config::{Config, GeneralConfig, ScreenConfig, create_private_dir};
+use longcar_core::config::{Config, ScreenConfig, create_private_dir};
 use longcar_core::layout::plan_layout;
 use longcar_core::logparse::LogEvent;
 use longcar_core::model::{
@@ -63,6 +63,28 @@ pub enum Command {
     AddQuickScreen(String, oneshot::Sender<Result<String, DaemonError>>),
     UpdateSettings(String, Reply),
     SetAudioScreen(String, Reply),
+    SetScreenAudio {
+        screen: String,
+        enabled: bool,
+        reply: Reply,
+    },
+    SetScreenTouch {
+        screen: String,
+        enabled: bool,
+        reply: Reply,
+    },
+    SetScreenBitrate {
+        screen: String,
+        kbps: u32,
+        reply: Reply,
+    },
+    SetScreenLayout {
+        screen: String,
+        position: String,
+        relative_to: String,
+        alignment: String,
+        reply: Reply,
+    },
     ListPairings(String, JsonReply),
     Pair {
         screen: String,
@@ -241,6 +263,62 @@ impl Orchestrator {
     pub async fn set_audio_screen(&self, id: &str) -> Result<(), DaemonError> {
         let id = id.to_string();
         self.call(|reply| Command::SetAudioScreen(id, reply)).await
+    }
+
+    /// Stream this screen's audio to its client (per-device audio toggle).
+    pub async fn set_screen_audio(&self, screen: &str, enabled: bool) -> Result<(), DaemonError> {
+        let screen = screen.to_string();
+        self.call(|reply| Command::SetScreenAudio {
+            screen,
+            enabled,
+            reply,
+        })
+        .await
+    }
+
+    /// Send native pen/touch events for this screen.
+    pub async fn set_screen_touch(&self, screen: &str, enabled: bool) -> Result<(), DaemonError> {
+        let screen = screen.to_string();
+        self.call(|reply| Command::SetScreenTouch {
+            screen,
+            enabled,
+            reply,
+        })
+        .await
+    }
+
+    /// Quick bitrate preset (kbps; `0` removes the cap).
+    pub async fn set_screen_bitrate(&self, screen: &str, kbps: u32) -> Result<(), DaemonError> {
+        let screen = screen.to_string();
+        self.call(|reply| Command::SetScreenBitrate {
+            screen,
+            kbps,
+            reply,
+        })
+        .await
+    }
+
+    /// Quick placement change: `position` (`left|right|above|below`), `relative_to`
+    /// (`primary` or a screen id) and `alignment` (`start|center|end`).
+    pub async fn set_screen_layout(
+        &self,
+        screen: &str,
+        position: &str,
+        relative_to: &str,
+        alignment: &str,
+    ) -> Result<(), DaemonError> {
+        let screen = screen.to_string();
+        let position = position.to_string();
+        let relative_to = relative_to.to_string();
+        let alignment = alignment.to_string();
+        self.call(|reply| Command::SetScreenLayout {
+            screen,
+            position,
+            relative_to,
+            alignment,
+            reply,
+        })
+        .await
     }
 
     pub async fn list_pairings(&self, screen: &str) -> Result<String, DaemonError> {
@@ -488,6 +566,8 @@ struct ScreenRuntime {
     connector: String,
     mode_id: String,
     logical: Rect,
+    /// Scale Mutter actually applied (nearest supported to the configured one).
+    scale: f64,
     connected: bool,
     bitrate_kbps: u32,
     fps: u32,
@@ -505,6 +585,7 @@ struct StartedScreen {
     connector: String,
     mode_id: String,
     logical: Rect,
+    scale: f64,
     warnings: Vec<String>,
     snapshot_written: bool,
 }
@@ -537,6 +618,9 @@ enum ActorEvent {
     Health {
         screen: String,
         state: String,
+    },
+    Replanned {
+        rects: Vec<(String, Rect)>,
     },
     MonitorsChanged,
     Pairs {
@@ -797,6 +881,41 @@ impl Actor {
                 let result = self.set_audio_screen_command(&id);
                 let _ = reply.send(result);
             }
+            Command::SetScreenAudio {
+                screen,
+                enabled,
+                reply,
+            } => {
+                let result = self.set_screen_flag_command(&screen, |s| s.audio = enabled);
+                let _ = reply.send(result);
+            }
+            Command::SetScreenTouch {
+                screen,
+                enabled,
+                reply,
+            } => {
+                let result = self.set_screen_flag_command(&screen, |s| s.touch = enabled);
+                let _ = reply.send(result);
+            }
+            Command::SetScreenBitrate {
+                screen,
+                kbps,
+                reply,
+            } => {
+                let result = self.set_screen_flag_command(&screen, |s| s.max_bitrate_kbps = kbps);
+                let _ = reply.send(result);
+            }
+            Command::SetScreenLayout {
+                screen,
+                position,
+                relative_to,
+                alignment,
+                reply,
+            } => {
+                let result =
+                    self.set_screen_layout_command(&screen, &position, &relative_to, &alignment);
+                let _ = reply.send(result);
+            }
             Command::ListPairings(screen, reply) => {
                 let result = self.list_pairings_command(&screen).await;
                 let _ = reply.send(result);
@@ -1054,16 +1173,59 @@ impl Actor {
             .and_then(|v| v.as_str())
             .ok_or_else(|| DaemonError::invalid("screen payload needs an id"))?
             .to_string();
-        let old = self
-            .config
-            .screen(&id)
-            .cloned()
-            .ok_or_else(|| DaemonError::not_found(format!("screen '{id}'")))?;
         let new: ScreenConfig = serde_json::from_value(value)
             .map_err(|e| DaemonError::invalid(format!("screen is not valid: {e}")))?;
         if new.id != id {
             return Err(DaemonError::invalid("a screen id is immutable"));
         }
+        self.apply_screen_update(new)
+    }
+
+    /// Mutate one screen's config through a closure and apply it like `UpdateScreen`.
+    fn set_screen_flag_command(
+        &mut self,
+        id: &str,
+        mutate: impl FnOnce(&mut ScreenConfig),
+    ) -> Result<(), DaemonError> {
+        let mut screen = self
+            .config
+            .screen(id)
+            .cloned()
+            .ok_or_else(|| DaemonError::not_found(format!("screen '{id}'")))?;
+        mutate(&mut screen);
+        self.apply_screen_update(screen)
+    }
+
+    fn set_screen_layout_command(
+        &mut self,
+        id: &str,
+        position: &str,
+        relative_to: &str,
+        alignment: &str,
+    ) -> Result<(), DaemonError> {
+        let position = parse_position(position)?;
+        let alignment = parse_alignment(alignment)?;
+        let relative_to = if relative_to.trim().is_empty() {
+            "primary".to_string()
+        } else {
+            relative_to.trim().to_string()
+        };
+        self.set_screen_flag_command(id, |screen| {
+            screen.position = position;
+            screen.alignment = alignment;
+            screen.relative_to = relative_to;
+        })
+    }
+
+    /// Shared path for `UpdateScreen` and the quick controls: validate, persist, then
+    /// restart or replan only what the change requires.
+    fn apply_screen_update(&mut self, new: ScreenConfig) -> Result<(), DaemonError> {
+        let id = new.id.clone();
+        let old = self
+            .config
+            .screen(&id)
+            .cloned()
+            .ok_or_else(|| DaemonError::not_found(format!("screen '{id}'")))?;
         let diff = plan::diff_screens(&old, &new);
         if diff.is_empty() {
             return Ok(());
@@ -1090,7 +1252,7 @@ impl Actor {
         }
         let backup = self.config.clone();
         if let Some(entry) = self.config.screen_mut(&id) {
-            *entry = new.clone();
+            *entry = new;
         }
         if let Err(err) = self.config.validate() {
             self.config = backup;
@@ -1108,7 +1270,7 @@ impl Actor {
             }
             self.set_state(&id, ScreenState::Stopping);
             self.queue.push_back(Action::Stop(id.clone()));
-            self.queue.push_back(Action::Start(id.clone()));
+            self.queue.push_back(Action::Start(id));
         } else if self.runtimes.contains_key(&id) && diff.layout {
             self.spawn_replan();
         }
@@ -1325,6 +1487,8 @@ impl Actor {
         Ok(())
     }
 
+    /// Legacy "exactly one screen carries audio" setter: enables `id` and disables the
+    /// rest. An empty id turns audio off everywhere (use the device's own speakers).
     fn set_audio_screen_command(&mut self, id: &str) -> Result<(), DaemonError> {
         if !id.trim().is_empty() && self.config.screen(id).is_none() {
             return Err(DaemonError::not_found(format!("screen '{id}'")));
@@ -1335,10 +1499,18 @@ impl Actor {
             .any(|state| *state == ScreenState::Streaming)
         {
             return Err(DaemonError::conflict(
-                "stop streaming before changing the audio screen",
+                "stop the stream before changing audio routing",
             ));
         }
-        self.config.general.audio_screen = id.to_string();
+        let audio_changed = self.config.screens.iter().any(|screen| {
+            screen.audio != (!id.trim().is_empty() && screen.id == id.trim())
+        });
+        if !audio_changed {
+            return Ok(());
+        }
+        for screen in &mut self.config.screens {
+            screen.audio = !id.trim().is_empty() && screen.id == id.trim();
+        }
         self.save_config()?;
         self.restart_ready_screens();
         self.publish(false);
@@ -1611,11 +1783,10 @@ impl Actor {
         let mut seeds = Vec::new();
         for (id, runtime) in &self.runtimes {
             if let Some(screen) = self.config.screen(id) {
-                seeds.push(VirtualSeed::from_screen(
-                    screen,
-                    &runtime.connector,
-                    &runtime.mode_id,
-                ));
+                let mut seed =
+                    VirtualSeed::from_screen(screen, &runtime.connector, &runtime.mode_id);
+                seed.scale = runtime.scale;
+                seeds.push(seed);
             }
         }
         if seeds.is_empty() {
@@ -1625,8 +1796,11 @@ impl Actor {
         let logs = self.logs.clone();
         self.suppress_until = Some(Instant::now() + Duration::from_secs(2));
         tokio::spawn(async move {
-            if let Err(err) = replan_task(seeds, &logs).await {
-                logs.daemon_line(format!("layout replan failed: {err}"));
+            match replan_task(seeds, &logs).await {
+                Ok(rects) => {
+                    let _ = tx.send(ActorEvent::Replanned { rects }).await;
+                }
+                Err(err) => logs.daemon_line(format!("layout replan failed: {err}")),
             }
             let _ = tx.send(ActorEvent::MonitorsChanged).await;
         });
@@ -1645,7 +1819,6 @@ impl Actor {
             self.runtimes.insert(screen.to_string(), runtime);
             return;
         };
-        let general = self.config.general.clone();
         self.set_state(screen, ScreenState::Starting);
         self.suppress_until = Some(Instant::now() + Duration::from_secs(2));
         let tx = self.evt_tx.clone();
@@ -1657,6 +1830,7 @@ impl Actor {
                 connector,
                 mode_id,
                 logical,
+                scale,
                 ..
             } = runtime;
             instance.stop().await;
@@ -1677,7 +1851,7 @@ impl Actor {
                     }
                 }
             });
-            match SunshineInstance::start(&config, &general, &family, instance_tx).await {
+            match SunshineInstance::start(&config, &family, instance_tx).await {
                 Ok(mut instance) => {
                     instance.spawn_log_tail();
                     let _ = tx
@@ -1689,6 +1863,7 @@ impl Actor {
                                 connector,
                                 mode_id,
                                 logical,
+                                scale,
                                 connected: false,
                                 bitrate_kbps: 0,
                                 fps: 0,
@@ -1728,7 +1903,6 @@ impl Actor {
             self.set_state(id, ScreenState::Off);
             return;
         };
-        let general = self.config.general.clone();
         let seeds: Vec<VirtualSeed> = self
             .runtimes
             .iter()
@@ -1745,7 +1919,7 @@ impl Actor {
         let logs = self.logs.clone();
         let screen_id = id.to_string();
         tokio::spawn(async move {
-            let result = start_task(&screen, &general, seeds, need_snapshot, &logs, &tx).await;
+            let result = start_task(&screen, seeds, need_snapshot, &logs, &tx).await;
             let _ = tx
                 .send(ActorEvent::Started {
                     screen: screen_id,
@@ -1771,6 +1945,7 @@ impl Actor {
                             connector: started.connector.clone(),
                             mode_id: started.mode_id.clone(),
                             logical: started.logical,
+                            scale: started.scale,
                             connected: false,
                             bitrate_kbps: 0,
                             fps: 0,
@@ -1918,6 +2093,14 @@ impl Actor {
                     self.publish(false);
                 }
             }
+            ActorEvent::Replanned { rects } => {
+                for (screen, rect) in rects {
+                    if let Some(runtime) = self.runtimes.get_mut(&screen) {
+                        runtime.logical = rect;
+                    }
+                }
+                self.publish(false);
+            }
             ActorEvent::MonitorsChanged => {
                 self.on_monitors_changed().await;
             }
@@ -1949,6 +2132,31 @@ fn occupies_screen(state: ScreenState) -> bool {
             | ScreenState::Streaming
             | ScreenState::Stopping
     )
+}
+
+fn parse_position(value: &str) -> Result<longcar_core::model::Position, DaemonError> {
+    use longcar_core::model::Position;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "left" => Ok(Position::Left),
+        "right" => Ok(Position::Right),
+        "above" => Ok(Position::Above),
+        "below" => Ok(Position::Below),
+        other => Err(DaemonError::invalid(format!(
+            "unknown position '{other}' (left, right, above, below)"
+        ))),
+    }
+}
+
+fn parse_alignment(value: &str) -> Result<longcar_core::model::Alignment, DaemonError> {
+    use longcar_core::model::Alignment;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "start" => Ok(Alignment::Start),
+        "center" | "" => Ok(Alignment::Center),
+        "end" => Ok(Alignment::End),
+        other => Err(DaemonError::invalid(format!(
+            "unknown alignment '{other}' (start, center, end)"
+        ))),
+    }
 }
 
 /// Convert a command-level error into the screen error record used in state.
@@ -2600,7 +2808,6 @@ fn display_stage(error: &longcar_display::DisplayError) -> Stage {
 /// Full start sequence: snapshot, virtual output, layout, Sunshine instance.
 async fn start_task(
     screen: &ScreenConfig,
-    general: &GeneralConfig,
     seeds: Vec<VirtualSeed>,
     need_snapshot: bool,
     logs: &LogHub,
@@ -2642,7 +2849,7 @@ async fn start_task(
         .await
         .map_err(|e| StageError::new(display_stage(&e), e.to_string()))?;
 
-    match finish_start(&client, display, screen, general, seeds, logs, evt).await {
+    match finish_start(&client, display, screen, seeds, logs, evt).await {
         Ok(mut started) => {
             started.snapshot_written = snapshot_written;
             Ok(started)
@@ -2662,7 +2869,6 @@ async fn finish_start(
     client: &DisplayConfigClient,
     display: MutterDisplay,
     screen: &ScreenConfig,
-    general: &GeneralConfig,
     mut seeds: Vec<VirtualSeed>,
     logs: &LogHub,
     evt: &mpsc::Sender<ActorEvent>,
@@ -2767,7 +2973,7 @@ async fn finish_start(
         }
     });
 
-    let mut instance = match SunshineInstance::start(screen, general, &family, instance_tx).await {
+    let mut instance = match SunshineInstance::start(screen, &family, instance_tx).await {
         Ok(instance) => instance,
         Err(e) => {
             let stage = match e {
@@ -2794,13 +3000,17 @@ async fn finish_start(
         connector,
         mode_id,
         logical,
+        scale,
         warnings: plan_warnings,
         snapshot_written: false,
     })
 }
 
 /// Apply the layout for the current set of virtual outputs (position changes).
-async fn replan_task(seeds: Vec<VirtualSeed>, logs: &LogHub) -> Result<(), StageError> {
+async fn replan_task(
+    seeds: Vec<VirtualSeed>,
+    logs: &LogHub,
+) -> Result<Vec<(String, Rect)>, StageError> {
     let client = DisplayConfigClient::new()
         .await
         .map_err(|e| StageError::new(Stage::MutterSession, e.to_string()))?;
@@ -2817,7 +3027,7 @@ async fn replan_task(seeds: Vec<VirtualSeed>, logs: &LogHub) -> Result<(), Stage
         .await
         .map_err(|e| StageError::new(Stage::Layout, e.to_string()))?;
     logs.daemon_line("layout re-applied");
-    Ok(())
+    Ok(plan.virtual_rects)
 }
 
 /// Assert the new output landed at the planned position and every virtual monitor is

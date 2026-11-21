@@ -116,6 +116,10 @@ pub struct ScreenEntry {
     pub max_bitrate_kbps: u32,
     pub max_resolution: String,
     pub cursor: CursorMode,
+    #[serde(default = "default_true")]
+    pub audio: bool,
+    #[serde(default = "default_true")]
+    pub touch: bool,
     #[serde(default)]
     pub logical: Option<Rect>,
     #[serde(default)]
@@ -147,6 +151,10 @@ pub struct PhysicalEntry {
     pub scale: f64,
     pub transform: u32,
     pub primary: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// A saved screen set.
@@ -301,6 +309,7 @@ mod tests {
             "slot": 0, "position": "right", "relativeTo": "primary", "alignment": "center",
             "encoder": "auto", "hevc": "auto", "av1": "off",
             "maxBitrateKbps": 30000, "maxResolution": "2560x1600", "cursor": "embedded",
+            "audio": true, "touch": true,
             "logical": null,
             "connector": null, "nodeId": null,
             "basePort": 48049, "webPort": 48050,
@@ -345,6 +354,7 @@ mod tests {
                 "slot": 0, "position": "right", "relativeTo": "primary",
                 "alignment": "center", "encoder": "auto", "hevc": "auto", "av1": "off",
                 "maxBitrateKbps": 30000, "maxResolution": "2560x1600", "cursor": "embedded",
+            "audio": true, "touch": true,
                 "basePort": 48049, "webPort": 48050
             }],
             "settings": {
@@ -497,6 +507,8 @@ mod tests {
             max_bitrate_kbps: 30000,
             max_resolution: "2560x1600".to_string(),
             cursor: CursorMode::Embedded,
+            audio: true,
+            touch: true,
             logical: Some(Rect::new(1536, 0, 1707, 1067)),
             connector: Some("Meta-0".to_string()),
             node_id: Some(42),

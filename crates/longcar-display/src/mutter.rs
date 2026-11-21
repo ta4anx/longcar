@@ -28,6 +28,9 @@ use zbus::{OwnedVariant, Variant};
 
 use crate::gst::{Keepalive, message_error_text, pipeline_description};
 
+const DISPLAY_CALL_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Session bus name for Mutter's ScreenCast service.
 pub const SCREENCAST_BUS: &str = "org.gnome.Mutter.ScreenCast";
 pub const SCREENCAST_PATH: &str = "/org/gnome/Mutter/ScreenCast";
 pub const SCREENCAST_INTERFACE: &str = "org.gnome.Mutter.ScreenCast";
@@ -350,7 +353,11 @@ impl MutterDisplay {
         }
 
         let mut session_gone = false;
-        let stop: zbus::Result<()> = self.session.call("Stop", &()).await;
+        let stop: zbus::Result<()> =
+            match tokio::time::timeout(DISPLAY_CALL_TIMEOUT, self.session.call("Stop", &())).await {
+                Ok(result) => result,
+                Err(_) => Err(zbus::Error::Failure("Session.Stop timed out".to_string())),
+            };
         if let Err(err) = stop {
             if is_ignorable_teardown_error(&err) {
                 session_gone = true;
@@ -509,6 +516,18 @@ impl DisplayConfigClient {
     }
 
     pub async fn current_state(&self) -> Result<DisplayState, DisplayError> {
+        // A ScreenCast session or an open portal picker can make the compositor hold
+        // DisplayConfig calls; never let that wedge a caller (the daemon's shutdown and
+        // layout tracking depend on this returning).
+        match tokio::time::timeout(DISPLAY_CALL_TIMEOUT, self.current_state_inner()).await {
+            Ok(result) => result,
+            Err(_) => Err(DisplayError::Other(
+                "GetCurrentState timed out after 5s".to_string(),
+            )),
+        }
+    }
+
+    async fn current_state_inner(&self) -> Result<DisplayState, DisplayError> {
         let raw: RawDisplayState = self
             .proxy
             .call("GetCurrentState", &())
@@ -521,6 +540,23 @@ impl DisplayConfigClient {
 
     /// Verify then apply a temporary layout (`method` 1, never 2).
     pub async fn apply_layout(&self, layout: &[LogicalMonitorConfig]) -> Result<(), DisplayError> {
+        match tokio::time::timeout(
+            DISPLAY_CALL_TIMEOUT,
+            self.apply_layout_inner(layout),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(DisplayError::Other(
+                "ApplyMonitorsConfig timed out after 5s".to_string(),
+            )),
+        }
+    }
+
+    async fn apply_layout_inner(
+        &self,
+        layout: &[LogicalMonitorConfig],
+    ) -> Result<(), DisplayError> {
         let state = self.current_state().await?;
         match self.apply_attempt(state.serial, layout).await {
             Ok(()) => Ok(()),
@@ -556,6 +592,13 @@ impl DisplayConfigClient {
 
     /// Capture the current physical layout for later restoration.
     pub async fn snapshot(&self) -> Result<LayoutSnapshot, DisplayError> {
+        match tokio::time::timeout(DISPLAY_CALL_TIMEOUT, self.snapshot_inner()).await {
+            Ok(result) => result,
+            Err(_) => Err(DisplayError::Other("snapshot timed out".to_string())),
+        }
+    }
+
+    async fn snapshot_inner(&self) -> Result<LayoutSnapshot, DisplayError> {
         let state = self.current_state().await?;
         let virtual_connectors: Vec<String> = state
             .monitors
@@ -619,6 +662,16 @@ impl DisplayConfigClient {
     /// Missing connectors and modes are skipped and reported as warnings; at
     /// least one restored monitor must be primary.
     pub async fn restore(&self, snapshot: &LayoutSnapshot) -> Result<Vec<String>, DisplayError> {
+        match tokio::time::timeout(DISPLAY_CALL_TIMEOUT, self.restore_inner(snapshot)).await {
+            Ok(result) => result,
+            Err(_) => Err(DisplayError::Other("layout restore timed out".to_string())),
+        }
+    }
+
+    async fn restore_inner(
+        &self,
+        snapshot: &LayoutSnapshot,
+    ) -> Result<Vec<String>, DisplayError> {
         let state = self.current_state().await?;
         let mut warnings = Vec::new();
         let mut layout = Vec::new();

@@ -192,7 +192,6 @@ impl SunshineInstance {
     /// Full start sequence: dirs, config, credentials, unit, API readiness, log tail.
     pub async fn start(
         screen: &ScreenConfig,
-        general: &longcar_core::config::GeneralConfig,
         family: &PortFamily,
         events: mpsc::Sender<InstanceEvent>,
     ) -> Result<Self, InstanceError> {
@@ -200,7 +199,7 @@ impl SunshineInstance {
         layout.ensure()?;
         layout.rotate_log()?;
 
-        let config = render_config(screen, general, family.base, &layout.dir);
+        let config = render_config(screen, family.base, &layout.dir);
         let apps = render_apps(screen);
         write_private(&layout.config_path(), config.as_bytes())?;
         write_private(&layout.apps_path(), apps.as_bytes())?;

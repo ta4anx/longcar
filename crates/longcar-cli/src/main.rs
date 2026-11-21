@@ -46,6 +46,7 @@ trait Daemon {
     fn update_screen(&self, json: &str) -> zbus::Result<()>;
     fn remove_screen(&self, id: &str, purge: bool) -> zbus::Result<()>;
     fn apply_preset(&self, preset_id: &str) -> zbus::Result<()>;
+    fn set_audio_screen(&self, id: &str) -> zbus::Result<()>;
     fn list_pairings(&self, screen_id: &str) -> zbus::Result<String>;
     fn pair(&self, screen_id: &str, pairing_id: &str, pin: &str, name: &str) -> zbus::Result<bool>;
     fn unpair(&self, screen_id: &str, uuid: &str) -> zbus::Result<()>;
@@ -195,6 +196,10 @@ enum Command {
         #[arg(long = "self-test")]
         self_test: bool,
     },
+    /// Route streamed audio to one screen, or turn it off everywhere.
+    ///
+    /// `longcarctl audio off` leaves sound on the device's own speakers.
+    Audio { target: String },
     /// Apply a doctor fix.
     Fix { fix_id: String },
     /// Print daemon and screen logs.
@@ -332,6 +337,7 @@ async fn run() -> CliResult<()> {
         Command::Network { command } => network(command).await,
         Command::Doctor { json, self_test } => doctor(json, self_test).await,
         Command::Fix { fix_id } => fix(&fix_id).await,
+        Command::Audio { target } => audio(target).await,
         Command::Logs { n, json } => logs(n, json).await,
         Command::RestoreLayout => restore_layout().await,
         Command::DiscardLayout => discard_layout().await,
@@ -1188,6 +1194,25 @@ fn print_doctor(raw: &str) -> CliResult<()> {
             let _ = write!(line, " fix: {fix}");
         }
         println!("{line}");
+    }
+    Ok(())
+}
+
+async fn audio(target: String) -> CliResult<()> {
+    let id = if matches!(target.as_str(), "off" | "none" | "local") {
+        String::new()
+    } else {
+        target
+    };
+    let proxy = connect().await?;
+    proxy
+        .set_audio_screen(&id)
+        .await
+        .map_err(map_zbus)?;
+    if id.is_empty() {
+        println!("audio disabled on every screen (devices use their own speakers)");
+    } else {
+        println!("audio routed to {id}");
     }
     Ok(())
 }

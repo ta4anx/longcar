@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
-VERSION="0.1.0"
+VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
 ARCH="amd64"
 PKG="longcar_${VERSION}_${ARCH}"
 STAGE="build/deb/${PKG}"

@@ -57,6 +57,8 @@ Consequences: one portal approval per screen, one `sunshine_state.json` per scre
 5. Start the screen's Sunshine unit.
 6. Wait for API readiness and a portal restore token (the user approves the picker).
 7. `ready`; log tailing drives `streaming`, bitrate, fps and session history.
+8. Quick controls (`SetScreenBitrate`, `SetScreenAudio`, `SetScreenTouch`) restart that
+   unit only; `SetScreenLayout` re-plans the layout live.
 
 Stop runs in reverse: Sunshine unit, virtual display, then layout restore.
 
@@ -104,6 +106,9 @@ Failure records carry a stage: `Validate`, `MutterSession`, `RecordVirtual`,
 `PipeWireNode`, `Layout`, `SunshineSpawn`, `SunshineApi`, `PortalAuth`, `Pairing`,
 `Api`, `Io`.
 
+Per-device toggles map onto Sunshine keys: `audio` → `stream_audio`,
+`touch` → `native_pen_touch`.
+
 Daemon state is derived: `stopping` during StopAll, `starting` while a start command
 runs, `degraded` when any screen is in `error` or `layout-restore-available` is set,
 `active` when any screen is `ready`/`streaming`, otherwise `idle`.
@@ -130,7 +135,7 @@ runs, `degraded` when any screen is in `error` or `layout-restore-available` is 
 
 | Path | Mode | Content |
 | --- | --- | --- |
-| `~/.config/longcar/config.toml` | 0600 | screens, presets, settings |
+| `~/.config/longcar/config.toml` | 0600 | screens (incl. per-device `audio`/`touch`), presets, settings |
 | `~/.config/longcar/instances/<id>/credentials.json` | 0600 | Sunshine API username/password (written before the first handshake) |
 | `~/.config/longcar/instances/<id>/sunshine/sunshine.conf` | 0600 | generated config |
 | `~/.config/longcar/instances/<id>/sunshine/sunshine_state.json` | 0600 | Sunshine-owned pairings |
@@ -145,7 +150,8 @@ runs, `degraded` when any screen is in `error` or `layout-restore-available` is 
   virtual monitors with the same resolution cannot be told apart in the picker.
 - Resolution/geometry changes require a new portal approval.
 - The GNOME input seat is shared: every stream controls the same pointer/keyboard.
-- Only one stream can carry audio (`general.audio_screen`).
+- Audio is per screen (`audio` flag). Two devices can stream the same desktop mix, but
+  the mix is shared: it is not per-device audio.
 - No HDR transport; HEVC/AV1 Main10 is only a codec advertisement.
 - Idle Moonlight clients do not advertise over mDNS; discovery lists Sunshine hosts and
   pending pairings.

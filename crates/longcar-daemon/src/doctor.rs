@@ -941,6 +941,8 @@ mod tests {
             max_bitrate_kbps: 0,
             max_resolution: String::new(),
             cursor: CursorMode::Embedded,
+            audio: true,
+            touch: true,
         }
     }
 

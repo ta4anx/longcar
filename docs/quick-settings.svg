@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Diagram (not a screenshot) of the Longcar Quick Settings menu in GNOME 50. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" font-family="Cantarell, Inter, sans-serif">
+  <rect width="900" height="600" rx="14" fill="#1c1c1c"/>
+  <!-- top bar -->
+  <rect x="0" y="0" width="900" height="44" rx="14" fill="#242424"/>
+  <rect x="0" y="30" width="900" height="14" fill="#242424"/>
+  <text x="24" y="28" fill="#e6e6e6" font-size="14">Activities</text>
+  <text x="450" y="28" fill="#cfcfcf" font-size="14" text-anchor="middle">Sat 21 Nov 08:47</text>
+  <!-- toggle tile -->
+  <rect x="694" y="8" width="182" height="30" rx="8" fill="#3584e4"/>
+  <rect x="704" y="15" width="16" height="16" rx="3" fill="#ffffff" opacity="0.92"/>
+  <rect x="709" y="29" width="6" height="2" rx="1" fill="#ffffff" opacity="0.92"/>
+  <text x="730" y="28" fill="#ffffff" font-size="13.5">Longcar</text>
+  <text x="866" y="28" fill="#d7e7fb" font-size="11" text-anchor="end">▾</text>
+
+  <!-- menu card -->
+  <rect x="470" y="58" width="406" height="512" rx="14" fill="#242424" stroke="#333333"/>
+  <text x="494" y="88" fill="#e6e6e6" font-size="15" font-weight="600">Longcar</text>
+  <rect x="790" y="72" width="62" height="24" rx="7" fill="#3584e4" opacity="0.22"/>
+  <text x="821" y="89" fill="#8ab4f8" font-size="11.5" text-anchor="middle">2 active</text>
+
+  <!-- daemon / status header row -->
+  <rect x="486" y="104" width="374" height="30" rx="7" fill="#2c2c2c"/>
+  <text x="500" y="124" fill="#c9c9c9" font-size="12.5">2 active · 1 live</text>
+
+  <!-- screen submenu (expanded) -->
+  <rect x="486" y="142" width="374" height="30" rx="7" fill="#303030"/>
+  <rect x="500" y="151" width="12" height="12" rx="2" fill="#3584e4"/>
+  <text x="522" y="162" fill="#f0f0f0" font-size="13">Samsung Tab — streaming</text>
+  <text x="846" y="162" fill="#9a9a9a" font-size="11" text-anchor="end">▾</text>
+
+  <!-- nested items -->
+  <rect x="502" y="180" width="358" height="26" rx="6" fill="#282828"/>
+  <text x="514" y="197" fill="#a8a8a8" font-size="11.5">1280×800 · 10 Mbps · audio · touch · right of primary</text>
+
+  <rect x="502" y="212" width="358" height="28" rx="6" fill="#2c2c2c"/>
+  <text x="514" y="231" fill="#e2e2e2" font-size="12.5">Stop</text>
+  <text x="514" y="231" fill="#e2e2e2" font-size="12.5" opacity="0"/>
+  <text x="846" y="231" fill="#7d7d7d" font-size="11" text-anchor="end">running</text>
+
+  <!-- bitrate submenu -->
+  <rect x="502" y="246" width="358" height="28" rx="6" fill="#303030"/>
+  <text x="514" y="265" fill="#f0f0f0" font-size="12.5">Bitrate</text>
+  <text x="846" y="265" fill="#9a9a9a" font-size="11" text-anchor="end">10 Mbps  ▾</text>
+  <rect x="518" y="278" width="342" height="112" rx="8" fill="#262626" stroke="#333333"/>
+  <text x="532" y="298" fill="#8f8f8f" font-size="11.5">4 Mbps</text>
+  <text x="532" y="320" fill="#8f8f8f" font-size="11.5">6 Mbps</text>
+  <text x="532" y="342" fill="#8f8f8f" font-size="11.5">8 Mbps</text>
+  <rect x="522" y="350" width="334" height="24" rx="5" fill="#333333"/>
+  <text x="532" y="367" fill="#8ab4f8" font-size="12" font-weight="600">✓ 10 Mbps</text>
+  <text x="532" y="386" fill="#8f8f8f" font-size="11.5">15 Mbps · 20 Mbps · 30 Mbps · No cap</text>
+
+  <!-- position submenu -->
+  <rect x="502" y="404" width="358" height="28" rx="6" fill="#2c2c2c"/>
+  <text x="514" y="423" fill="#e2e2e2" font-size="12.5">Position</text>
+  <text x="846" y="423" fill="#9a9a9a" font-size="11" text-anchor="end">Right  ▾</text>
+
+  <!-- audio / touch toggles -->
+  <rect x="502" y="438" width="358" height="28" rx="6" fill="#2c2c2c"/>
+  <text x="514" y="457" fill="#e2e2e2" font-size="12.5">✓  Audio on this device</text>
+  <rect x="502" y="472" width="358" height="28" rx="6" fill="#2c2c2c"/>
+  <text x="514" y="491" fill="#e2e2e2" font-size="12.5">✓  Native touchscreen input</text>
+
+  <line x1="486" y1="508" x2="860" y2="508" stroke="#3a3a3a"/>
+  <rect x="486" y="514" width="374" height="28" rx="6" fill="#2c2c2c"/>
+  <text x="500" y="533" fill="#e2e2e2" font-size="12.5">Add phone screen</text>
+  <rect x="486" y="546" width="374" height="22" rx="6" fill="#2c2c2c" opacity="0"/>
+  <text x="500" y="561" fill="#cfcfcf" font-size="12.5">Open Longcar</text>
+
+  <text x="24" y="566" fill="#6f6f6f" font-size="11.5">Diagram of the Quick Settings menu — the real menu is rendered by GNOME Shell.</text>
+</svg>

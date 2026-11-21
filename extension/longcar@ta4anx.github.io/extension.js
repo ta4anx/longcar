@@ -35,6 +35,18 @@ const STATE_STYLES = {
     streaming: 'longcar-state-live',
 };
 
+const BITRATE_PRESETS_KBPS = [4000, 6000, 8000, 10000, 15000, 20000, 30000];
+
+const POSITION_OPTIONS = [
+    ['left', 'Left'],
+    ['right', 'Right'],
+    ['above', 'Above'],
+    ['below', 'Below'],
+];
+
+const CHECKED = '✓ ';
+const UNCHECKED = '   ';
+
 const LongcarIndicator = GObject.registerClass(
 class LongcarIndicator extends QuickSettings.SystemIndicator {
     _init() {
@@ -291,7 +303,17 @@ export default class LongcarExtension extends Extension {
         this._toggle.subtitle = `${active} active · ${live} live`;
 
         const signature = JSON.stringify({
-            screens: screens.map(screen => [screen.id, screen.name, screen.state]),
+            screens: screens.map(screen => [
+                screen.id,
+                screen.name,
+                screen.state,
+                screen.maxBitrateKbps ?? 0,
+                Boolean(screen.audio),
+                Boolean(screen.touch),
+                screen.position ?? '',
+                screen.relativeTo ?? '',
+                screen.alignment ?? '',
+            ]),
             presets: presets.map(preset => [preset.id, preset.name, preset.screens]),
             warnings,
         });
@@ -320,17 +342,7 @@ export default class LongcarExtension extends Extension {
         this._menuItems.push(header);
 
         for (const screen of screens) {
-            const state = screen.state ?? 'off';
-            const label = state === 'waitingPortal'
-                ? `${screen.name} — approve in GNOME`
-                : `${screen.name} — ${state}`;
-
-            const item = new PopupMenu.PopupMenuItem(label,
-                {reactive: false, can_focus: false, activate: false});
-            const style = STATE_STYLES[state];
-            if (style)
-                item.label.add_style_class_name(style);
-            item.setSensitive(false);
+            const item = this._buildScreenMenu(screen);
             menu.addMenuItem(item);
             this._menuItems.push(item);
         }
@@ -375,6 +387,131 @@ export default class LongcarExtension extends Extension {
         });
         menu.addMenuItem(open);
         this._menuItems.push(open);
+    }
+
+    _buildScreenMenu(screen) {
+        const screenId = screen.id;
+        const state = screen.state ?? 'off';
+        const active = ACTIVE_STATES.has(state);
+        const label = state === 'waitingPortal'
+            ? `${screen.name} — approve in GNOME`
+            : `${screen.name} — ${state}`;
+
+        const item = new PopupMenu.PopupSubMenuMenuItem(label, false);
+        const style = STATE_STYLES[state];
+        if (style)
+            item.label.add_style_class_name(style);
+
+        const bitrate = screen.maxBitrateKbps ?? 0;
+        console.debug(`longcar: screen ${screenId} bitrate ${bitrate}`);
+
+        const width = screen.width ?? 0;
+        const height = screen.height ?? 0;
+        const rate = bitrate > 0 ? `${bitrate / 1000} Mbps` : 'no cap';
+        const audio = screen.audio ? 'audio' : 'audio off';
+        const touch = screen.touch ? 'touch' : 'touch off';
+
+        const mode = new PopupMenu.PopupMenuItem(
+            `${width}×${height} · ${rate} · ${audio} · ${touch}`,
+            {reactive: false, can_focus: false, activate: false});
+        mode.setSensitive(false);
+        item.menu.addMenuItem(mode);
+
+        const start = new PopupMenu.PopupMenuItem('Start');
+        start.setSensitive(!active);
+        start.connect('activate', () => this._onStartScreen(screenId));
+        item.menu.addMenuItem(start);
+
+        const stop = new PopupMenu.PopupMenuItem('Stop');
+        stop.setSensitive(active);
+        stop.connect('activate', () => this._onStopScreen(screenId));
+        item.menu.addMenuItem(stop);
+
+        item.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        const bitrateMenu = new PopupMenu.PopupSubMenuMenuItem('Bitrate', false);
+        for (const kbps of BITRATE_PRESETS_KBPS) {
+            const checked = bitrate === kbps;
+            const preset = new PopupMenu.PopupMenuItem(
+                `${checked ? CHECKED : UNCHECKED}${kbps / 1000} Mbps`);
+            preset.connect('activate', () => this._onSetBitrate(screenId, kbps));
+            bitrateMenu.menu.addMenuItem(preset);
+        }
+
+        const noCap = new PopupMenu.PopupMenuItem(
+            `${bitrate === 0 ? CHECKED : UNCHECKED}No cap`);
+        noCap.connect('activate', () => this._onSetBitrate(screenId, 0));
+        bitrateMenu.menu.addMenuItem(noCap);
+        item.menu.addMenuItem(bitrateMenu);
+
+        const positionMenu = new PopupMenu.PopupSubMenuMenuItem('Position', false);
+        for (const [value, text] of POSITION_OPTIONS) {
+            const checked = screen.position === value;
+            const option = new PopupMenu.PopupMenuItem(
+                `${checked ? CHECKED : UNCHECKED}${text}`);
+            option.connect('activate', () => this._onSetLayout(screenId, value));
+            positionMenu.menu.addMenuItem(option);
+        }
+        item.menu.addMenuItem(positionMenu);
+
+        item.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        const audioItem = new PopupMenu.PopupMenuItem(
+            `${screen.audio ? CHECKED : UNCHECKED}Audio`);
+        audioItem.connect('activate',
+            () => this._onToggleAudio(screenId, !screen.audio));
+        item.menu.addMenuItem(audioItem);
+
+        const touchItem = new PopupMenu.PopupMenuItem(
+            `${screen.touch ? CHECKED : UNCHECKED}Touch`);
+        touchItem.connect('activate',
+            () => this._onToggleTouch(screenId, !screen.touch));
+        item.menu.addMenuItem(touchItem);
+
+        return item;
+    }
+
+    _findScreen(screenId) {
+        const screens = Array.isArray(this._state?.screens) ? this._state.screens : [];
+        return screens.find(screen => screen.id === screenId) ?? null;
+    }
+
+    _onStartScreen(screenId) {
+        console.debug(`longcar: start screen ${screenId}`);
+        this._activateItem('StartScreen', new GLib.Variant('(s)', [screenId]));
+    }
+
+    _onStopScreen(screenId) {
+        console.debug(`longcar: stop screen ${screenId}`);
+        this._activateItem('StopScreen', new GLib.Variant('(s)', [screenId]));
+    }
+
+    _onSetBitrate(screenId, kbps) {
+        console.debug(`longcar: set bitrate ${kbps}`);
+        this._activateItem('SetScreenBitrate',
+            new GLib.Variant('(su)', [screenId, kbps]));
+    }
+
+    _onSetLayout(screenId, position) {
+        const screen = this._findScreen(screenId);
+        const relativeTo = screen?.relativeTo || 'primary';
+        const alignment = screen?.alignment || 'center';
+
+        console.debug(`longcar: set layout ${position} ${relativeTo} ${alignment}`);
+        this._activateItem('SetScreenLayout',
+            new GLib.Variant('(ssss)', [screenId, position, relativeTo, alignment]));
+    }
+
+    _onToggleAudio(screenId, enabled) {
+        console.debug(`longcar: set audio ${enabled}`);
+        this._activateItem('SetScreenAudio',
+            new GLib.Variant('(sb)', [screenId, enabled]));
+    }
+
+    _onToggleTouch(screenId, enabled) {
+        console.debug(`longcar: set touch ${enabled}`);
+        this._activateItem('SetScreenTouch',
+            new GLib.Variant('(sb)', [screenId, enabled]));
     }
 
     _clearMenuItems() {

@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::config::{GeneralConfig, ScreenConfig};
+use crate::config::ScreenConfig;
 
 /// Lowest Sunshine release Longcar can drive.
 pub const MIN_VERSION: SunshineVersion = SunshineVersion {
@@ -151,12 +151,7 @@ pub fn is_flatpak_only() -> bool {
 }
 
 /// Render the exact Sunshine configuration for one screen.
-pub fn render_config(
-    screen: &ScreenConfig,
-    general: &GeneralConfig,
-    base_port: u16,
-    instance_dir: &Path,
-) -> String {
+pub fn render_config(screen: &ScreenConfig, base_port: u16, instance_dir: &Path) -> String {
     let mut out = String::new();
     out.push_str(&format!("sunshine_name = Longcar - {}\n", screen.name));
     out.push_str(&format!("port = {base_port}\n"));
@@ -173,12 +168,14 @@ pub fn render_config(
         let (width, height) = screen.effective_max_resolution();
         out.push_str(&format!("max_stream_resolution = {width}x{height}\n"));
     }
-    let audio = if general.audio_screen == screen.id {
-        "enabled"
-    } else {
-        "disabled"
-    };
-    out.push_str(&format!("stream_audio = {audio}\n"));
+    out.push_str(&format!(
+        "stream_audio = {}\n",
+        if screen.audio { "enabled" } else { "disabled" }
+    ));
+    out.push_str(&format!(
+        "native_pen_touch = {}\n",
+        if screen.touch { "enabled" } else { "disabled" }
+    ));
     out.push_str("upnp = disabled\n");
     out.push_str("origin_web_ui_allowed = pc\n");
     out.push_str("system_tray = disabled\n");
@@ -222,13 +219,8 @@ mod tests {
             max_bitrate_kbps: 30000,
             max_resolution: "2560x1600".into(),
             cursor: CursorMode::Embedded,
-        }
-    }
-
-    fn general() -> GeneralConfig {
-        GeneralConfig {
-            audio_screen: "tablet".into(),
-            ..GeneralConfig::default()
+            audio: true,
+            touch: true,
         }
     }
 
@@ -267,7 +259,7 @@ mod tests {
 
     #[test]
     fn default_auto_config_has_exact_keys_and_order() {
-        let text = render_config(&screen(), &general(), 48049, Path::new("/tmp/inst"));
+        let text = render_config(&screen(), 48049, Path::new("/tmp/inst"));
         let expected = concat!(
             "sunshine_name = Longcar - Tablet\n",
             "port = 48049\n",
@@ -277,6 +269,7 @@ mod tests {
             "max_bitrate = 30000\n",
             "max_stream_resolution = 2560x1600\n",
             "stream_audio = enabled\n",
+            "native_pen_touch = enabled\n",
             "upnp = disabled\n",
             "origin_web_ui_allowed = pc\n",
             "system_tray = disabled\n",
@@ -299,7 +292,7 @@ mod tests {
         ] {
             let mut cfg = screen();
             cfg.encoder = encoder;
-            let text = render_config(&cfg, &general(), 48049, Path::new("/i"));
+            let text = render_config(&cfg, 48049, Path::new("/i"));
             match expected {
                 Some(value) => assert!(text.contains(&format!("encoder = {value}\n"))),
                 None => assert!(!text.contains("encoder =")),
@@ -314,7 +307,7 @@ mod tests {
             let mut cfg = screen();
             cfg.hevc = mode;
             assert!(
-                render_config(&cfg, &general(), 1, Path::new("/i"))
+                render_config(&cfg, 1, Path::new("/i"))
                     .contains(&format!("hevc_mode = {value}\n"))
             );
         }
@@ -327,28 +320,28 @@ mod tests {
             let mut cfg = screen();
             cfg.av1 = mode;
             assert!(
-                render_config(&cfg, &general(), 1, Path::new("/i"))
+                render_config(&cfg, 1, Path::new("/i"))
                     .contains(&format!("av1_mode = {value}\n"))
             );
         }
     }
 
     #[test]
-    fn omissions_and_audio_selection() {
+    fn omissions_and_audio_touch_flags() {
         let mut cfg = screen();
         cfg.max_bitrate_kbps = 0;
         cfg.max_resolution = String::new();
-        let text = render_config(&cfg, &general(), 48050, Path::new("/i"));
+        let text = render_config(&cfg, 48050, Path::new("/i"));
         assert!(!text.contains("max_bitrate"));
         assert!(!text.contains("max_stream_resolution"));
         assert!(text.contains("stream_audio = enabled\n"));
+        assert!(text.contains("native_pen_touch = enabled\n"));
 
-        let other = GeneralConfig {
-            audio_screen: "phone".into(),
-            ..GeneralConfig::default()
-        };
-        let text = render_config(&screen(), &other, 48050, Path::new("/i"));
+        cfg.audio = false;
+        cfg.touch = false;
+        let text = render_config(&cfg, 48050, Path::new("/i"));
         assert!(text.contains("stream_audio = disabled\n"));
+        assert!(text.contains("native_pen_touch = disabled\n"));
     }
 
     #[test]
@@ -358,12 +351,12 @@ mod tests {
         cfg.height = 1200;
         cfg.max_resolution = "1280x800".into();
         assert!(
-            render_config(&cfg, &general(), 48049, Path::new("/i"))
+            render_config(&cfg, 48049, Path::new("/i"))
                 .contains("max_stream_resolution = 1280x800\n")
         );
         cfg.max_resolution = "garbage".into();
         assert!(
-            render_config(&cfg, &general(), 48049, Path::new("/i"))
+            render_config(&cfg, 48049, Path::new("/i"))
                 .contains("max_stream_resolution = 1920x1200\n")
         );
     }

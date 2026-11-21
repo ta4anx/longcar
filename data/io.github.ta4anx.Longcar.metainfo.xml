@@ -35,6 +35,11 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-11-21">
+      <description>
+        <p>Per-device audio and native-touch switches, bitrate and layout quick controls in the app and the Quick Settings menu, doctor moved into Settings, and a new monitor icon.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-11-21">
       <description>
         <p>First release: virtual display management, per-screen Sunshine instances, presets, pairing, Quick Settings control.</p>

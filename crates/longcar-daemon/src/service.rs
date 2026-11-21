@@ -142,6 +142,52 @@ impl Daemon {
             .map_err(Into::into)
     }
 
+    #[zbus(name = "SetScreenAudio")]
+    async fn set_screen_audio(
+        &self,
+        screen_id: String,
+        enabled: bool,
+    ) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_screen_audio(&screen_id, enabled)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "SetScreenTouch")]
+    async fn set_screen_touch(
+        &self,
+        screen_id: String,
+        enabled: bool,
+    ) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_screen_touch(&screen_id, enabled)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "SetScreenBitrate")]
+    async fn set_screen_bitrate(&self, screen_id: String, kbps: u32) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_screen_bitrate(&screen_id, kbps)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "SetScreenLayout")]
+    async fn set_screen_layout(
+        &self,
+        screen_id: String,
+        position: String,
+        relative_to: String,
+        alignment: String,
+    ) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_screen_layout(&screen_id, &position, &relative_to, &alignment)
+            .await
+            .map_err(Into::into)
+    }
+
     #[zbus(name = "ListPairings")]
     async fn list_pairings(&self, screen_id: String) -> Result<String, ServiceError> {
         self.orchestrator
@@ -333,22 +379,27 @@ pub async fn run() -> ExitCode {
     wait_for_shutdown().await;
 
     eprintln!("longcar-daemon: stopping screens");
-    let _ = orchestrator.stop_all().await;
+    // Shutdown must be prompt: systemd kills us after 90 s, and a compositor or Sunshine
+    // unit that refuses to answer must not turn a restart into a SIGKILL.
+    let _ = tokio::time::timeout(Duration::from_secs(6), orchestrator.stop_all()).await;
+    // Wait until the virtual outputs are really gone: exiting while a ScreenCast session
+    // is still being torn down leaves the connector to be reaped later, which can remove
+    // a freshly created output of the next daemon run.
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
         let state = orchestrator.state();
-        if !state.screens.iter().any(|screen| screen.state.is_active()) {
+        let busy = state.screens.iter().any(|screen| {
+            screen.state.is_active() || screen.connector.is_some() || screen.node_id.is_some()
+        });
+        if !busy {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    if let Ok(snapshot) = std::fs::read_to_string(paths::layout_snapshot_path()) {
-        let _ = snapshot;
-        if !orchestrator.config().general.restore_layout_on_stop {
-            eprintln!("longcar-daemon: layout restore disabled, keeping the snapshot");
-        }
-    }
-    ExitCode::SUCCESS
+    eprintln!("longcar-daemon: shutdown complete");
+    // Leave immediately: dropping the runtime waits for stray blocking tasks (mDNS
+    // discovery, notifications) and can outlive the unit's stop timeout.
+    std::process::exit(0);
 }
 
 async fn wait_for_shutdown() {
