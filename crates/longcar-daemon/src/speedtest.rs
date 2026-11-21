@@ -57,12 +57,15 @@ pub struct SpeedTestServer {
 }
 
 impl SpeedTestServer {
-    /// Bind `0.0.0.0:0`, advertise `host` in the URL and start serving.
+    /// Bind the preferred LAN address on an ephemeral port and start serving.
+    ///
+    /// Binding the specific address (not `0.0.0.0`) keeps the listener off VPN and loopback
+    /// interfaces, and matches the URL the device is given.
     pub async fn start(host: &str, events: mpsc::Sender<SpeedTestEvent>) -> Result<Self, String> {
         let token = random_token();
-        let listener = TcpListener::bind(("0.0.0.0", 0))
+        let listener = TcpListener::bind((host, 0))
             .await
-            .map_err(|e| format!("cannot open the speed test listener: {e}"))?;
+            .map_err(|e| format!("cannot open the speed test listener on {host}: {e}"))?;
         let port = listener
             .local_addr()
             .map_err(|e| format!("cannot read the listener address: {e}"))?
