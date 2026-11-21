@@ -766,7 +766,7 @@ pub async fn collect(
     });
 
     // 13. Pending layout snapshot.
-    if snapshot_present {
+    if snapshot_present && active_screens.is_empty() {
         checks.push(with_fix(
             check(
                 "snapshot",
@@ -775,6 +775,13 @@ pub async fn collect(
                 "a layout snapshot from an earlier run is waiting to be restored".to_string(),
             ),
             "restore-layout",
+        ));
+    } else if snapshot_present {
+        checks.push(check(
+            "snapshot",
+            "Pending layout snapshot",
+            CheckStatus::Ok,
+            "a layout snapshot is held by the running screens and restored on stop".to_string(),
         ));
     } else {
         checks.push(check(
