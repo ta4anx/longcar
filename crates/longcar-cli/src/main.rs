@@ -1205,10 +1205,7 @@ async fn audio(target: String) -> CliResult<()> {
         target
     };
     let proxy = connect().await?;
-    proxy
-        .set_audio_screen(&id)
-        .await
-        .map_err(map_zbus)?;
+    proxy.set_audio_screen(&id).await.map_err(map_zbus)?;
     if id.is_empty() {
         println!("audio disabled on every screen (devices use their own speakers)");
     } else {

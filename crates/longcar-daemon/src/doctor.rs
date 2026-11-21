@@ -183,12 +183,17 @@ fn enabled_extensions() -> Vec<String> {
 }
 
 /// Port availability check reused by `collect` and its unit test.
-fn ports_check(config: &Config) -> (CheckStatus, String) {
+fn ports_check(config: &Config, active_screens: &[String]) -> (CheckStatus, String) {
     if config.screens.is_empty() {
         return (CheckStatus::Ok, "no screens configured".to_string());
     }
     let mut conflicts = Vec::new();
+    let mut checked = 0usize;
     for screen in &config.screens {
+        if active_screens.iter().any(|id| id == &screen.id) {
+            continue;
+        }
+        checked += 1;
         match PortFamily::for_slot(screen.slot) {
             Ok(family) => {
                 if let Err(err) = check_ports(&family) {
@@ -201,28 +206,36 @@ fn ports_check(config: &Config) -> (CheckStatus, String) {
             Err(err) => conflicts.push(format!("screen '{}': {err}", screen.id)),
         }
     }
+    if checked == 0 {
+        return (
+            CheckStatus::Ok,
+            "every configured screen is running; its own ports are in use".to_string(),
+        );
+    }
     if conflicts.is_empty() {
         (
             CheckStatus::Ok,
             format!(
-                "{} port families are free (ports held by running screens legitimately look busy)",
-                config.screens.len()
+                "{} port families are free (running screens are skipped)",
+                checked
             ),
         )
     } else {
         (
             CheckStatus::Error,
-            format!(
-                "{} conflict(s), ports of running screens count as busy: {}",
-                conflicts.len(),
-                conflicts.join("; ")
-            ),
+            format!("{} conflict(s): {}", conflicts.len(), conflicts.join("; ")),
         )
     }
 }
 
 /// Gather the full doctor report.
-pub async fn collect(config: &Config, snapshot_present: bool) -> DoctorReport {
+/// `active_screens` are screens that are running (or hold a virtual output); their own
+/// ports are busy by definition and must not be reported as conflicts.
+pub async fn collect(
+    config: &Config,
+    snapshot_present: bool,
+    active_screens: &[String],
+) -> DoctorReport {
     let mut checks = Vec::new();
 
     // 1. Session.
@@ -692,7 +705,7 @@ pub async fn collect(config: &Config, snapshot_present: bool) -> DoctorReport {
     checks.push(uinput);
 
     // 11. Port families.
-    let (port_status, port_detail) = ports_check(config);
+    let (port_status, port_detail) = ports_check(config, active_screens);
     checks.push(check("ports", "Port families", port_status, port_detail));
 
     // 12. Pending layout snapshot.
@@ -1021,6 +1034,30 @@ mod tests {
     }
 
     #[test]
+    fn port_check_skips_running_screens() {
+        let mut config = Config::default();
+        let mut phone = sample_screen(1);
+        phone.id = "phone".to_string();
+        phone.name = "Phone".to_string();
+        config.screens.push(phone);
+        // Occupy the second screen's web port so a check would report a conflict.
+        let family = PortFamily::for_slot(1).expect("slot 1");
+        let listener = match TcpListener::bind(("127.0.0.1", family.web)) {
+            Ok(listener) => listener,
+            Err(_) => return, // port already busy for another reason; nothing to prove
+        };
+        let (status, detail) = ports_check(&config, &[]);
+        assert_eq!(status, CheckStatus::Error, "{detail}");
+        assert!(detail.contains("48110"), "{detail}");
+        drop(listener);
+
+        let active = vec!["phone".to_string()];
+        let (status, detail) = ports_check(&config, &active);
+        assert_eq!(status, CheckStatus::Ok, "{detail}");
+        assert!(detail.contains("running"), "{detail}");
+    }
+
+    #[test]
     fn port_conflict_detail_names_ss_hint() {
         // Slot 7's https port, chosen for the lowest collision risk.
         let family = PortFamily::for_slot(7).expect("slot 7");
@@ -1031,7 +1068,7 @@ mod tests {
             screens: vec![sample_screen(7)],
             ..Config::default()
         };
-        let (status, detail) = ports_check(&config);
+        let (status, detail) = ports_check(&config, &[]);
         assert_eq!(status, CheckStatus::Error, "detail: {detail}");
         assert!(detail.contains("ss -ltnup"), "detail: {detail}");
     }
@@ -1050,7 +1087,7 @@ mod tests {
     #[ignore = "requires a live GNOME session"]
     fn real_collect_report() {
         let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
-        let report = runtime.block_on(collect(&Config::default(), false));
+        let report = runtime.block_on(collect(&Config::default(), false, &[]));
         println!("{}", report.to_json());
     }
 }

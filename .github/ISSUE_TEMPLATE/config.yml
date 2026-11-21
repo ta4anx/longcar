@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting wiki
+    url: https://github.com/ta4anx/longcar/wiki/Troubleshooting
+    about: Portal tokens, black screens on older tablets, port conflicts, layout restore
+  - name: Configuration reference
+    url: https://github.com/ta4anx/longcar/wiki/Configuration
+    about: Screens, presets, audio, touch, bitrate, ports and the state files
+  - name: Quick Settings extension
+    url: https://github.com/ta4anx/longcar/wiki/Quick-Settings
+    about: The toggle, per-screen menus, and how to reload the extension

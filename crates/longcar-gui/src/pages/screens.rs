@@ -31,6 +31,22 @@ const ENCODERS: &[&str] = &["auto", "vaapi", "nvenc", "vulkan", "software"];
 const HEVC_MODES: &[&str] = &["auto", "off", "main", "main10"];
 const AV1_MODES: &[&str] = &["auto", "off", "main", "main10"];
 const POSITIONS: &[&str] = &["left", "right", "above", "below"];
+const POSITION_LABELS: &[&str] = &["Left", "Right", "Above", "Below"];
+const BITRATES: &[(u32, &str)] = &[
+    (0, "No cap"),
+    (4000, "4 Mbps"),
+    (6000, "6 Mbps"),
+    (8000, "8 Mbps"),
+    (10000, "10 Mbps"),
+    (15000, "15 Mbps"),
+    (20000, "20 Mbps"),
+    (30000, "30 Mbps"),
+];
+const AUDIO_TOOLTIP: &str = "Stream this screen's audio to the client";
+const TOUCH_TOOLTIP: &str =
+    "Send pen/touch events as a virtual touchscreen (off: touches act as pointer input)";
+const BITRATE_TOOLTIP: &str = "Maximum streaming bitrate for this screen";
+const POSITION_TOOLTIP: &str = "Placement relative to the reference screen";
 const ALIGNMENTS: &[&str] = &["start", "center", "end"];
 const CURSORS: &[&str] = &["hidden", "embedded", "metadata"];
 const SCALES: &[(&str, f64)] = &[
@@ -62,6 +78,7 @@ struct Inner {
     active: Cell<bool>,
 }
 
+#[derive(Clone)]
 struct ScreenRow {
     expander: adw::ExpanderRow,
     badge: gtk::Label,
@@ -71,6 +88,13 @@ struct ScreenRow {
     stack: gtk::Stack,
     preview_status: gtk::Label,
     picture: gtk::Picture,
+    audio: gtk::Switch,
+    touch: gtk::Switch,
+    bitrate: gtk::DropDown,
+    bitrate_model: gtk::StringList,
+    bitrate_values: Rc<RefCell<Vec<u32>>>,
+    position: gtk::DropDown,
+    syncing: Rc<Cell<bool>>,
 }
 
 struct PreviewPipeline {
@@ -317,14 +341,53 @@ impl ScreensPage {
             });
         }
 
+        let audio = gtk::Switch::builder()
+            .valign(gtk::Align::Center)
+            .tooltip_text(AUDIO_TOOLTIP)
+            .build();
+        audio.update_property(&[gtk::accessible::Property::Label(AUDIO_TOOLTIP)]);
+        let touch = gtk::Switch::builder()
+            .valign(gtk::Align::Center)
+            .tooltip_text(TOUCH_TOOLTIP)
+            .build();
+        touch.update_property(&[gtk::accessible::Property::Label(TOUCH_TOOLTIP)]);
+        let bitrate_model =
+            gtk::StringList::new(&BITRATES.iter().map(|(_, label)| *label).collect::<Vec<_>>());
+        let bitrate = gtk::DropDown::builder()
+            .model(&bitrate_model)
+            .valign(gtk::Align::Center)
+            .tooltip_text(BITRATE_TOOLTIP)
+            .width_request(108)
+            .build();
+        let bitrate_values = Rc::new(RefCell::new(
+            BITRATES.iter().map(|(kbps, _)| *kbps).collect::<Vec<_>>(),
+        ));
+        let position = gtk::DropDown::from_strings(POSITION_LABELS);
+        position.set_valign(gtk::Align::Center);
+        position.set_tooltip_text(Some(POSITION_TOOLTIP));
+        position.set_width_request(92);
+
+        let quick = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        quick.set_valign(gtk::Align::Center);
+        quick.append(&labeled_switch("Audio", &audio));
+        quick.append(&labeled_switch("Touch", &touch));
+        quick.append(&bitrate);
+        quick.append(&position);
+
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         actions.set_valign(gtk::Align::Center);
+        actions.set_halign(gtk::Align::End);
         actions.append(&badge);
         actions.append(&start);
         actions.append(&stop);
         actions.append(&edit);
         actions.append(&remove);
-        expander.add_suffix(&actions);
+
+        let suffix = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        suffix.set_valign(gtk::Align::Center);
+        suffix.append(&quick);
+        suffix.append(&actions);
+        expander.add_suffix(&suffix);
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
         content.set_margin_top(8);
@@ -385,13 +448,186 @@ impl ScreensPage {
             stack,
             preview_status,
             picture,
+            audio,
+            touch,
+            bitrate,
+            bitrate_model,
+            bitrate_values,
+            position,
+            syncing: Rc::new(Cell::new(false)),
         };
         update_row(&row, screen);
+        connect_quick_controls(&inner, &row, &screen.id);
         row
     }
 }
 
+fn labeled_switch(label: &str, switch: &gtk::Switch) -> gtk::Box {
+    let holder = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    holder.set_valign(gtk::Align::Center);
+    let text = gtk::Label::new(Some(label));
+    text.add_css_class("caption");
+    text.add_css_class("dim-label");
+    holder.append(&text);
+    holder.append(switch);
+    holder
+}
+
+fn connect_quick_controls(inner: &Rc<Inner>, row: &ScreenRow, id: &str) {
+    {
+        let inner = inner.clone();
+        let row = row.clone();
+        let id = id.to_string();
+        row.audio.clone().connect_active_notify(move |switch| {
+            if row.syncing.get() {
+                return;
+            }
+            let enabled = switch.is_active();
+            let Some(client) = inner.ctx.client() else {
+                inner.ctx.toast("The Longcar daemon is unavailable");
+                resync_row(&inner, &row, &id);
+                return;
+            };
+            let inner = inner.clone();
+            let row = row.clone();
+            let id = id.clone();
+            glib::spawn_future_local(async move {
+                if let Err(err) = client.set_screen_audio(&id, enabled).await {
+                    inner.ctx.toast_err("Could not change audio", &err);
+                    resync_row(&inner, &row, &id);
+                }
+            });
+        });
+    }
+    {
+        let inner = inner.clone();
+        let row = row.clone();
+        let id = id.to_string();
+        row.touch.clone().connect_active_notify(move |switch| {
+            if row.syncing.get() {
+                return;
+            }
+            let enabled = switch.is_active();
+            let Some(client) = inner.ctx.client() else {
+                inner.ctx.toast("The Longcar daemon is unavailable");
+                resync_row(&inner, &row, &id);
+                return;
+            };
+            let inner = inner.clone();
+            let row = row.clone();
+            let id = id.clone();
+            glib::spawn_future_local(async move {
+                if let Err(err) = client.set_screen_touch(&id, enabled).await {
+                    inner.ctx.toast_err("Could not change touch input", &err);
+                    resync_row(&inner, &row, &id);
+                }
+            });
+        });
+    }
+    {
+        let inner = inner.clone();
+        let row = row.clone();
+        let id = id.to_string();
+        row.bitrate
+            .clone()
+            .connect_selected_notify(move |dropdown| {
+                if row.syncing.get() {
+                    return;
+                }
+                let Some(kbps) = row
+                    .bitrate_values
+                    .borrow()
+                    .get(dropdown.selected() as usize)
+                    .copied()
+                else {
+                    return;
+                };
+                let current = inner
+                    .ctx
+                    .state()
+                    .and_then(|state| state.screens.into_iter().find(|screen| screen.id == id))
+                    .map(|screen| screen.max_bitrate_kbps);
+                if current == Some(kbps) {
+                    return;
+                }
+                let Some(client) = inner.ctx.client() else {
+                    inner.ctx.toast("The Longcar daemon is unavailable");
+                    resync_row(&inner, &row, &id);
+                    return;
+                };
+                let inner = inner.clone();
+                let row = row.clone();
+                let id = id.clone();
+                glib::spawn_future_local(async move {
+                    if let Err(err) = client.set_screen_bitrate(&id, kbps).await {
+                        inner.ctx.toast_err("Could not change bitrate", &err);
+                        resync_row(&inner, &row, &id);
+                    }
+                });
+            });
+    }
+    {
+        let inner = inner.clone();
+        let row = row.clone();
+        let id = id.to_string();
+        row.position
+            .clone()
+            .connect_selected_notify(move |dropdown| {
+                if row.syncing.get() {
+                    return;
+                }
+                let Some(position) = POSITIONS.get(dropdown.selected() as usize) else {
+                    return;
+                };
+                let Some(screen) = inner
+                    .ctx
+                    .state()
+                    .and_then(|state| state.screens.into_iter().find(|screen| screen.id == id))
+                else {
+                    return;
+                };
+                if position_of(screen.position) == *position {
+                    return;
+                }
+                let relative_to = screen.relative_to.clone();
+                let alignment = format!("{:?}", screen.alignment).to_lowercase();
+                let Some(client) = inner.ctx.client() else {
+                    inner.ctx.toast("The Longcar daemon is unavailable");
+                    resync_row(&inner, &row, &id);
+                    return;
+                };
+                let inner = inner.clone();
+                let row = row.clone();
+                let id = id.clone();
+                let position = (*position).to_string();
+                glib::spawn_future_local(async move {
+                    match client
+                        .set_screen_layout(&id, &position, &relative_to, &alignment)
+                        .await
+                    {
+                        Ok(()) => inner.ctx.toast("Screen position updated"),
+                        Err(err) => {
+                            inner.ctx.toast_err("Could not move screen", &err);
+                            resync_row(&inner, &row, &id);
+                        }
+                    }
+                });
+            });
+    }
+}
+
+fn resync_row(inner: &Rc<Inner>, row: &ScreenRow, id: &str) {
+    if let Some(screen) = inner
+        .ctx
+        .state()
+        .and_then(|state| state.screens.into_iter().find(|screen| screen.id == id))
+    {
+        update_row(row, &screen);
+    }
+}
+
 fn update_row(row: &ScreenRow, screen: &ScreenEntry) {
+    row.syncing.set(true);
     row.badge.set_label(util::state_label(screen.state));
     row.badge
         .set_css_classes(&[util::state_css_class(screen.state)]);
@@ -403,24 +639,91 @@ fn update_row(row: &ScreenRow, screen: &ScreenEntry) {
     );
     row.stop.set_sensitive(screen.state.is_active());
     row.detail.set_label(&detail_text(screen));
+    row.audio.set_active(screen.audio);
+    row.touch.set_active(screen.touch);
+    select_bitrate(row, screen.max_bitrate_kbps);
+    row.position.set_selected(position_index(screen.position));
+    row.syncing.set(false);
+
+    let streaming = screen.state == ScreenState::Streaming;
+    row.audio.set_sensitive(!streaming);
+    row.touch.set_sensitive(!streaming);
+    row.bitrate.set_sensitive(!streaming);
+    let suffix = if streaming {
+        " Unavailable while the screen is streaming."
+    } else {
+        ""
+    };
+    row.audio
+        .set_tooltip_text(Some(&format!("{AUDIO_TOOLTIP}.{suffix}")));
+    row.touch
+        .set_tooltip_text(Some(&format!("{TOUCH_TOOLTIP}.{suffix}")));
+    row.bitrate
+        .set_tooltip_text(Some(&format!("{BITRATE_TOOLTIP}.{suffix}")));
+    row.position.set_tooltip_text(Some(POSITION_TOOLTIP));
+}
+
+fn select_bitrate(row: &ScreenRow, kbps: u32) {
+    let mut values = row.bitrate_values.borrow_mut();
+    if let Some(index) = values.iter().position(|value| *value == kbps) {
+        row.bitrate.set_selected(index as u32);
+        return;
+    }
+    let label = if kbps == 0 {
+        "No cap".to_string()
+    } else {
+        format!("{kbps} kbps")
+    };
+    row.bitrate_model.append(&label);
+    values.push(kbps);
+    row.bitrate.set_selected((values.len() - 1) as u32);
+}
+
+fn position_of(position: Position) -> &'static str {
+    match position {
+        Position::Left => "left",
+        Position::Right => "right",
+        Position::Above => "above",
+        Position::Below => "below",
+    }
+}
+
+fn position_index(position: Position) -> u32 {
+    match position {
+        Position::Left => 0,
+        Position::Right => 1,
+        Position::Above => 2,
+        Position::Below => 3,
+    }
 }
 
 fn summary(screen: &ScreenEntry) -> String {
     let relative = if screen.relative_to.is_empty() || screen.relative_to == "primary" {
-        "the primary monitor".to_string()
+        "primary".to_string()
     } else {
         screen.relative_to.clone()
     };
-    format!(
-        "{} × {} · {:.0} Hz · {:.2}× · {} of {} · slot {}",
-        screen.width,
-        screen.height,
-        screen.refresh_hz,
-        screen.scale,
-        util::enum_label(&format!("{:?}", screen.position).to_lowercase()),
-        relative,
-        screen.slot
-    )
+    let bitrate = if screen.max_bitrate_kbps == 0 {
+        "no cap".to_string()
+    } else if screen.max_bitrate_kbps.is_multiple_of(1000) {
+        format!("{} Mbps", screen.max_bitrate_kbps / 1000)
+    } else {
+        format!("{} kbps", screen.max_bitrate_kbps)
+    };
+    let mut parts = vec![
+        format!("{}×{}", screen.width, screen.height),
+        format!("{:.0} Hz", screen.refresh_hz),
+        format!("{:.2}×", screen.scale),
+        format!("{} of {}", position_of(screen.position), relative),
+        bitrate,
+    ];
+    if screen.audio {
+        parts.push("audio".to_string());
+    }
+    if screen.touch {
+        parts.push("touch".to_string());
+    }
+    parts.join(" · ")
 }
 
 fn detail_text(screen: &ScreenEntry) -> String {
@@ -608,6 +911,8 @@ struct DialogInner {
     encoder: gtk::DropDown,
     hevc: gtk::DropDown,
     av1: gtk::DropDown,
+    audio: adw::SwitchRow,
+    touch: adw::SwitchRow,
     bitrate: gtk::SpinButton,
     max_resolution: adw::EntryRow,
     cursor: gtk::DropDown,
@@ -631,6 +936,8 @@ impl ScreenDialog {
         let encoder: gtk::DropDown = builder.object("encoder_dropdown").expect("encoder");
         let hevc: gtk::DropDown = builder.object("hevc_dropdown").expect("hevc");
         let av1: gtk::DropDown = builder.object("av1_dropdown").expect("av1");
+        let audio: adw::SwitchRow = builder.object("audio_switch").expect("audio switch");
+        let touch: adw::SwitchRow = builder.object("touch_switch").expect("touch switch");
         let bitrate: gtk::SpinButton = builder.object("bitrate_spin").expect("bitrate");
         let max_resolution: adw::EntryRow = builder
             .object("max_resolution_entry")
@@ -676,6 +983,8 @@ impl ScreenDialog {
             encoder,
             hevc,
             av1,
+            audio,
+            touch,
             bitrate,
             max_resolution,
             cursor,
@@ -773,6 +1082,8 @@ impl DialogInner {
                 self.refresh.set_value(screen.refresh_hz);
                 self.slot.set_value(f64::from(screen.slot));
                 self.bitrate.set_value(f64::from(screen.max_bitrate_kbps));
+                self.audio.set_active(screen.audio);
+                self.touch.set_active(screen.touch);
                 self.max_resolution.set_text(&screen.max_resolution);
                 util::select_dropdown(
                     &self.position,
@@ -825,6 +1136,8 @@ impl DialogInner {
                 self.av1.set_selected(1);
                 self.cursor.set_selected(1);
                 self.bitrate.set_value(30000.0);
+                self.audio.set_active(true);
+                self.touch.set_active(true);
                 self.max_resolution.set_text("");
                 let used: Vec<u8> = self
                     .ctx
@@ -899,6 +1212,8 @@ impl DialogInner {
             max_bitrate_kbps: self.bitrate.value() as u32,
             max_resolution,
             cursor: parse_cursor(&self.cursor),
+            audio: self.audio.is_active(),
+            touch: self.touch.is_active(),
         })
     }
 }
@@ -1116,6 +1431,8 @@ fn screen_json(screen: &ScreenConfig) -> serde_json::Value {
         "maxBitrateKbps": screen.max_bitrate_kbps,
         "maxResolution": screen.max_resolution,
         "cursor": format!("{:?}", screen.cursor).to_lowercase(),
+        "audio": screen.audio,
+        "touch": screen.touch,
     })
 }
 
@@ -1204,11 +1521,15 @@ mod tests {
             max_bitrate_kbps: 41000,
             max_resolution: "2560x1600".to_string(),
             cursor: CursorMode::Embedded,
+            audio: true,
+            touch: false,
         };
         let json = screen_json(&screen);
         assert_eq!(json["maxBitrateKbps"], 41000);
         assert_eq!(json["refreshHz"], 120.0);
         assert_eq!(json["relativeTo"], "primary");
+        assert_eq!(json["audio"], true);
+        assert_eq!(json["touch"], false);
         assert!(json.get("max_bitrate_kbps").is_none());
         assert!(json.get("refresh_hz").is_none());
     }

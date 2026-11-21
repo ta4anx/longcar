@@ -21,11 +21,15 @@
   <screenshots>
     <screenshot type="default">
       <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/main.png</image>
-      <caption>Screens with the virtual layout preview</caption>
+      <caption>Screens with per-device audio, touch, bitrate and position controls</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/doctor.png</image>
-      <caption>Doctor checks for the session, Sunshine and ports</caption>
+      <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/settings.png</image>
+      <caption>Per-device audio routing and behavior settings</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/diagnostics.png</image>
+      <caption>Diagnostics inside Settings</caption>
     </screenshot>
   </screenshots>
   <url type="homepage">https://github.com/ta4anx/longcar</url>

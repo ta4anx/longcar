@@ -131,6 +131,8 @@ Shell, so the tile shows exactly the daemon's state.
 - **Diagnostics** (formerly the Doctor page) — the 14 checks, fixes, the display
   self-test, and copyable diagnostics.
 
+<img src="docs/screenshots/diagnostics.png" alt="Diagnostics inside Settings">
+
 The Screens page carries the fast controls: audio, native touch, bitrate preset, and
 position for each screen, applied immediately (audio/touch/bitrate restart that screen's
 unit, so the stream has to be stopped first; position changes apply live).
@@ -146,6 +148,12 @@ longcarctl network hosts|ports      longcarctl logs -n 200
 longcarctl audio off|SCREEN         longcarctl restore-layout | discard-layout
 longcarctl setup [--extension-only|--service-only]
 ```
+
+## Contributing
+
+Bug reports with `longcarctl doctor --json` go a long way. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the crate layout, the check commands and the
+"stock GNOME, stock Sunshine" ground rules.
 
 ## Documentation
 

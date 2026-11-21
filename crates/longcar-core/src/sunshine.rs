@@ -307,8 +307,7 @@ mod tests {
             let mut cfg = screen();
             cfg.hevc = mode;
             assert!(
-                render_config(&cfg, 1, Path::new("/i"))
-                    .contains(&format!("hevc_mode = {value}\n"))
+                render_config(&cfg, 1, Path::new("/i")).contains(&format!("hevc_mode = {value}\n"))
             );
         }
         for (mode, value) in [
@@ -320,8 +319,7 @@ mod tests {
             let mut cfg = screen();
             cfg.av1 = mode;
             assert!(
-                render_config(&cfg, 1, Path::new("/i"))
-                    .contains(&format!("av1_mode = {value}\n"))
+                render_config(&cfg, 1, Path::new("/i")).contains(&format!("av1_mode = {value}\n"))
             );
         }
     }

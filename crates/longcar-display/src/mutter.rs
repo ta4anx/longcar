@@ -353,11 +353,15 @@ impl MutterDisplay {
         }
 
         let mut session_gone = false;
-        let stop: zbus::Result<()> =
-            match tokio::time::timeout(DISPLAY_CALL_TIMEOUT, self.session.call("Stop", &())).await {
-                Ok(result) => result,
-                Err(_) => Err(zbus::Error::Failure("Session.Stop timed out".to_string())),
-            };
+        let stop: zbus::Result<()> = match tokio::time::timeout(
+            DISPLAY_CALL_TIMEOUT,
+            self.session.call("Stop", &()),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => Err(zbus::Error::Failure("Session.Stop timed out".to_string())),
+        };
         if let Err(err) = stop {
             if is_ignorable_teardown_error(&err) {
                 session_gone = true;
@@ -540,12 +544,7 @@ impl DisplayConfigClient {
 
     /// Verify then apply a temporary layout (`method` 1, never 2).
     pub async fn apply_layout(&self, layout: &[LogicalMonitorConfig]) -> Result<(), DisplayError> {
-        match tokio::time::timeout(
-            DISPLAY_CALL_TIMEOUT,
-            self.apply_layout_inner(layout),
-        )
-        .await
-        {
+        match tokio::time::timeout(DISPLAY_CALL_TIMEOUT, self.apply_layout_inner(layout)).await {
             Ok(result) => result,
             Err(_) => Err(DisplayError::Other(
                 "ApplyMonitorsConfig timed out after 5s".to_string(),
@@ -668,10 +667,7 @@ impl DisplayConfigClient {
         }
     }
 
-    async fn restore_inner(
-        &self,
-        snapshot: &LayoutSnapshot,
-    ) -> Result<Vec<String>, DisplayError> {
+    async fn restore_inner(&self, snapshot: &LayoutSnapshot) -> Result<Vec<String>, DisplayError> {
         let state = self.current_state().await?;
         let mut warnings = Vec::new();
         let mut layout = Vec::new();

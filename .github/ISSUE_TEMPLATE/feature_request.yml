@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a capability or a change to Longcar
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that Longcar makes hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should Longcar do instead? Mention where it belongs (app page, Quick Settings, `longcarctl`, D-Bus).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried, other tools that do it, etc.
+  - type: markdown
+    attributes:
+      value: |
+        Longcar is deliberately built on stock GNOME and stock Sunshine: no vkms, no
+        Sunshine fork, no Flatpak-managed Sunshine. Requests that need a Sunshine fork are
+        better filed upstream.

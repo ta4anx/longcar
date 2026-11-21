@@ -33,6 +33,16 @@ pub trait DaemonControl {
     fn update_settings(&self, json: &str) -> zbus::Result<()>;
     fn set_presets(&self, json: &str) -> zbus::Result<()>;
     fn set_audio_screen(&self, id: &str) -> zbus::Result<()>;
+    fn set_screen_audio(&self, screen_id: &str, enabled: bool) -> zbus::Result<()>;
+    fn set_screen_touch(&self, screen_id: &str, enabled: bool) -> zbus::Result<()>;
+    fn set_screen_bitrate(&self, screen_id: &str, kbps: u32) -> zbus::Result<()>;
+    fn set_screen_layout(
+        &self,
+        screen_id: &str,
+        position: &str,
+        relative_to: &str,
+        alignment: &str,
+    ) -> zbus::Result<()>;
     fn list_pairings(&self, screen_id: &str) -> zbus::Result<String>;
     fn pair(&self, screen_id: &str, pairing_id: &str, pin: &str, name: &str) -> zbus::Result<bool>;
     fn cancel_pairing(&self, screen_id: &str, pairing_id: &str) -> zbus::Result<()>;
@@ -124,6 +134,36 @@ impl Client {
     }
     pub async fn set_audio_screen(&self, id: &str) -> Result<(), String> {
         self.proxy.set_audio_screen(id).await.map_err(err_str)
+    }
+    pub async fn set_screen_audio(&self, id: &str, enabled: bool) -> Result<(), String> {
+        self.proxy
+            .set_screen_audio(id, enabled)
+            .await
+            .map_err(err_str)
+    }
+    pub async fn set_screen_touch(&self, id: &str, enabled: bool) -> Result<(), String> {
+        self.proxy
+            .set_screen_touch(id, enabled)
+            .await
+            .map_err(err_str)
+    }
+    pub async fn set_screen_bitrate(&self, id: &str, kbps: u32) -> Result<(), String> {
+        self.proxy
+            .set_screen_bitrate(id, kbps)
+            .await
+            .map_err(err_str)
+    }
+    pub async fn set_screen_layout(
+        &self,
+        id: &str,
+        position: &str,
+        relative_to: &str,
+        alignment: &str,
+    ) -> Result<(), String> {
+        self.proxy
+            .set_screen_layout(id, position, relative_to, alignment)
+            .await
+            .map_err(err_str)
     }
     pub async fn list_pairings(&self, screen_id: &str) -> Result<String, String> {
         self.proxy.list_pairings(screen_id).await.map_err(err_str)

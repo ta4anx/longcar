@@ -13,15 +13,14 @@ use serde_json::json;
 use crate::client::{Client, Ctx, DaemonWatcher};
 use crate::pages::activity::ActivityPage;
 use crate::pages::devices::DevicesPage;
-use crate::pages::doctor::DoctorPage;
 use crate::pages::network::NetworkPage;
 use crate::pages::presets::PresetsPage;
 use crate::pages::screens::ScreensPage;
 use crate::pages::settings::SettingsPage;
 use crate::util;
 
-const PAGES: [&str; 7] = [
-    "screens", "presets", "devices", "network", "activity", "doctor", "settings",
+const PAGES: [&str; 6] = [
+    "screens", "presets", "devices", "network", "activity", "settings",
 ];
 
 thread_local! {
@@ -133,7 +132,6 @@ impl AppWindow {
         let devices = DevicesPage::new(ctx.clone());
         let network = NetworkPage::new(ctx.clone());
         let activity = ActivityPage::new(ctx.clone());
-        let doctor = DoctorPage::new(ctx.clone());
         let settings = SettingsPage::new(ctx.clone());
 
         stack.add_named(screens.root(), Some("screens"));
@@ -141,7 +139,6 @@ impl AppWindow {
         stack.add_named(devices.root(), Some("devices"));
         stack.add_named(network.root(), Some("network"));
         stack.add_named(activity.root(), Some("activity"));
-        stack.add_named(doctor.root(), Some("doctor"));
         stack.add_named(settings.root(), Some("settings"));
 
         let unavailable = build_unavailable_page(&unavailable_error);
@@ -166,7 +163,6 @@ impl AppWindow {
             let screens = screens.clone();
             let devices = devices.clone();
             let activity = activity.clone();
-            let doctor = doctor.clone();
             let last_page = last_page.clone();
             stack.connect_visible_child_name_notify(move |stack| {
                 let name = stack
@@ -176,9 +172,6 @@ impl AppWindow {
                 screens.set_active(name == "screens");
                 devices.set_active(name == "devices");
                 activity.set_active(name == "activity");
-                if name == "doctor" {
-                    doctor.activate();
-                }
                 if !name.is_empty() && name != "unavailable" {
                     *last_page.borrow_mut() = name;
                 }
@@ -403,7 +396,7 @@ impl AppWindow {
                     "Sunshine is not installed; managed screens cannot start"
                 }
                 warnings::DAEMON_DEGRADED => {
-                    "One or more screens failed; open Activity or Doctor for details"
+                    "One or more screens failed; open Activity or Settings → Diagnostics for details"
                 }
                 warnings::RELATIVE_TO_INACTIVE => {
                     "A screen is placed relative to a screen that is not active"
@@ -627,30 +620,70 @@ pub fn capture_pages(dir: String) {
             glib::timeout_future(std::time::Duration::from_millis(450)).await;
             window.window.queue_draw();
             glib::timeout_future(std::time::Duration::from_millis(250)).await;
-            let width = f64::from(window.window.width());
-            let height = f64::from(window.window.height());
-            let paintable = gtk::WidgetPaintable::new(Some(&window.window));
-            let snapshot = gtk::Snapshot::new();
-            paintable.snapshot(&snapshot, width, height);
-            let Some(node) = snapshot.to_node() else {
-                eprintln!("shot: no render node for {name}");
-                continue;
-            };
-            let Some(renderer) = window.window.renderer() else {
-                eprintln!("shot: no renderer for {name}");
-                continue;
-            };
-            let texture = renderer.render_texture(&node, None);
-            let path = std::path::Path::new(&dir).join(format!("longcar-{name}.png"));
-            match texture.save_to_png(&path) {
-                Ok(()) => println!("shot: {}", path.display()),
-                Err(err) => eprintln!("shot: cannot save {}: {err}", path.display()),
-            }
+            save_shot(&window.window, &dir, name);
         }
+
+        // The Settings page is taller than the window; capture its diagnostics
+        // group too so verification can see the check results and self-test.
+        if let Some(index) = PAGES.iter().position(|name| *name == "settings") {
+            if let Some(row) = window.sidebar.row_at_index(index as i32) {
+                window.sidebar.select_row(Some(&row));
+            }
+            glib::timeout_future(std::time::Duration::from_millis(300)).await;
+            if let Some(scrolled) = find_scrolled(window.settings.root())
+                && let Some(child) = scrolled.child()
+                && let Some(bounds) = window.settings.diagnostics_widget().compute_bounds(&child)
+            {
+                let adjustment = scrolled.vadjustment();
+                let max = (adjustment.upper() - adjustment.page_size()).max(0.0);
+                adjustment.set_value((f64::from(bounds.y()) - 8.0).clamp(0.0, max));
+            }
+            glib::timeout_future(std::time::Duration::from_millis(450)).await;
+            window.window.queue_draw();
+            glib::timeout_future(std::time::Duration::from_millis(250)).await;
+            save_shot(&window.window, &dir, "settings-diagnostics");
+        }
+
         if let Some(app) = window.window.application() {
             app.quit();
         }
     });
+}
+
+fn save_shot(window: &adw::ApplicationWindow, dir: &str, name: &str) {
+    let width = f64::from(window.width());
+    let height = f64::from(window.height());
+    let paintable = gtk::WidgetPaintable::new(Some(window));
+    let snapshot = gtk::Snapshot::new();
+    paintable.snapshot(&snapshot, width, height);
+    let Some(node) = snapshot.to_node() else {
+        eprintln!("shot: no render node for {name}");
+        return;
+    };
+    let Some(renderer) = window.renderer() else {
+        eprintln!("shot: no renderer for {name}");
+        return;
+    };
+    let texture = renderer.render_texture(&node, None);
+    let path = std::path::Path::new(dir).join(format!("longcar-{name}.png"));
+    match texture.save_to_png(&path) {
+        Ok(()) => println!("shot: {}", path.display()),
+        Err(err) => eprintln!("shot: cannot save {}: {err}", path.display()),
+    }
+}
+
+fn find_scrolled(widget: &gtk::Widget) -> Option<gtk::ScrolledWindow> {
+    if let Some(scrolled) = widget.downcast_ref::<gtk::ScrolledWindow>() {
+        return Some(scrolled.clone());
+    }
+    let mut child = widget.first_child();
+    while let Some(current) = child {
+        if let Some(found) = find_scrolled(&current) {
+            return Some(found);
+        }
+        child = current.next_sibling();
+    }
+    None
 }
 
 fn show_logs(window: &adw::ApplicationWindow, client_slot: &Rc<RefCell<Option<Client>>>) {

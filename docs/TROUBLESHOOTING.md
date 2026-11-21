@@ -167,17 +167,17 @@ pointer is the same on every screen, so do not drive two screens at once.
 
 ## Audio plays on the wrong screen
 
-Only the screen named by `general.audio_screen` enables `stream_audio`. Change it in the
-app's Settings page (allowed only while no screen is streaming):
-`longcarctl` has no audio subcommand, but the same settings call works from D-Bus:
+Audio is a per-screen flag (`audio` in `<screen>`), exposed as a switch on each Screens
+row, in Settings, and in the Quick Settings menu. Turn it off on a device to let it use
+its own speakers. `longcarctl audio off` disables audio everywhere, `longcarctl audio
+<screen>` routes it to exactly one screen:
 
 ```bash
-gdbus call --session --dest io.github.ta4anx.Longcar.Daemon \
-  --object-path /io/github/ta4anx/Longcar/Daemon \
-  --method io.github.ta4anx.Longcar.Daemon.Control.SetAudioScreen tablet
+longcarctl audio off
+longcarctl audio samsung-tab
 ```
 
-Active screens are restarted to apply it.
+Active screens are restarted to apply it, so stop a live stream first.
 
 ## Suspend and resume
 
@@ -202,5 +202,5 @@ gdbus call --session --dest org.gnome.Mutter.DisplayConfig \
   --method org.gnome.Mutter.DisplayConfig.GetCurrentState > /tmp/longcar-display.txt
 ```
 
-The GUI's Doctor page has *Copy diagnostics*, and Activity has *Save diagnostics*,
+Settings → Diagnostics has *Copy diagnostics*, and Activity has *Save diagnostics*,
 which writes a redacted report.

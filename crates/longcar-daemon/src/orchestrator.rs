@@ -451,9 +451,18 @@ impl Orchestrator {
     pub async fn doctor(&self) -> Result<String, DaemonError> {
         let snapshot_present = paths::layout_snapshot_path().exists();
         let config = self.config();
+        // Running screens hold their own ports; reporting those as conflicts would make a
+        // healthy setup look broken.
+        let active: Vec<String> = self
+            .state()
+            .screens
+            .iter()
+            .filter(|screen| screen.state.is_active() || screen.connector.is_some())
+            .map(|screen| screen.id.clone())
+            .collect();
         let report = match tokio::time::timeout(
             Duration::from_secs(15),
-            crate::doctor::collect(&config, snapshot_present),
+            crate::doctor::collect(&config, snapshot_present, &active),
         )
         .await
         {
@@ -1502,9 +1511,11 @@ impl Actor {
                 "stop the stream before changing audio routing",
             ));
         }
-        let audio_changed = self.config.screens.iter().any(|screen| {
-            screen.audio != (!id.trim().is_empty() && screen.id == id.trim())
-        });
+        let audio_changed = self
+            .config
+            .screens
+            .iter()
+            .any(|screen| screen.audio != (!id.trim().is_empty() && screen.id == id.trim()));
         if !audio_changed {
             return Ok(());
         }

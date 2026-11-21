@@ -143,11 +143,7 @@ impl Daemon {
     }
 
     #[zbus(name = "SetScreenAudio")]
-    async fn set_screen_audio(
-        &self,
-        screen_id: String,
-        enabled: bool,
-    ) -> Result<(), ServiceError> {
+    async fn set_screen_audio(&self, screen_id: String, enabled: bool) -> Result<(), ServiceError> {
         self.orchestrator
             .set_screen_audio(&screen_id, enabled)
             .await
@@ -155,11 +151,7 @@ impl Daemon {
     }
 
     #[zbus(name = "SetScreenTouch")]
-    async fn set_screen_touch(
-        &self,
-        screen_id: String,
-        enabled: bool,
-    ) -> Result<(), ServiceError> {
+    async fn set_screen_touch(&self, screen_id: String, enabled: bool) -> Result<(), ServiceError> {
         self.orchestrator
             .set_screen_touch(&screen_id, enabled)
             .await

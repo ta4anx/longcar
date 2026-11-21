@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in Longcar does not work (screens, streaming, extension, doctor checks)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please run `longcarctl doctor --json` first — it answers most
+        environment questions. See the [wiki](https://github.com/ta4anx/longcar/wiki/Troubleshooting)
+        for portal tokens, black screens on old tablets and layout restore.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+      placeholder: |
+        1. longcarctl start --screen tablet
+        2. approved the picker
+        3. Moonlight shows a black screen, then "video decoder crashed"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: Paste `longcarctl doctor --json` (redact addresses if you care).
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        `longcarctl logs -n 300`, plus the screen's `sunshine.log` lines around the failure
+        (`~/.config/longcar/instances/<screen>/sunshine/sunshine.log`).
+      render: text
+  - type: textarea
+    id: status
+    attributes:
+      label: State
+      description: Paste `longcarctl status --json` while the problem is visible.
+      render: json
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: Distribution, GNOME Shell version, GPU and encoder (`cargo`? `software`? `vaapi`?).
+      placeholder: Ubuntu 26.04, GNOME Shell 50.1, AMD renoir, encoder=software
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      description: Device, app and version, resolution/bitrate/fps settings.
+      placeholder: Galaxy Note 10.1 (LineageOS), Moonlight 12.x, 1280x800, 10 Mbps, 30 fps
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: `longcarctl --version`, Sunshine (`sunshine --version`), extension state (`gnome-extensions info longcar@ta4anx.github.io`).
+    validations:
+      required: true

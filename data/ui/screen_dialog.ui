@@ -299,6 +299,18 @@
                       </object>
                     </child>
                     <child>
+                      <object class="AdwSwitchRow" id="audio_switch">
+                        <property name="title">Send audio to this device</property>
+                        <property name="subtitle">Stream the desktop's audio with this screen</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwSwitchRow" id="touch_switch">
+                        <property name="title">Native touchscreen input</property>
+                        <property name="subtitle">Send pen/touch events as a virtual touchscreen (off: touches act as pointer input)</property>
+                      </object>
+                    </child>
+                    <child>
                       <object class="AdwActionRow">
                         <property name="title">Max bitrate</property>
                         <property name="subtitle">kbps; 0 leaves it to Sunshine</property>
