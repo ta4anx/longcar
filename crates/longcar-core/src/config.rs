@@ -102,6 +102,8 @@ pub struct GeneralConfig {
     pub audio_screen: String,
     pub restore_layout_on_stop: bool,
     pub onboarding_complete: bool,
+    /// Put the host's default audio sink back when the last screen stops.
+    pub restore_host_audio: bool,
 }
 
 impl Default for GeneralConfig {
@@ -114,6 +116,7 @@ impl Default for GeneralConfig {
             audio_screen: String::new(),
             restore_layout_on_stop: true,
             onboarding_complete: false,
+            restore_host_audio: true,
         }
     }
 }
@@ -147,6 +150,18 @@ pub struct ScreenConfig {
     /// (`native_pen_touch` in Sunshine).
     #[serde(default = "default_true")]
     pub touch: bool,
+    /// Allow keyboard input from this client (`keyboard` in Sunshine).
+    #[serde(default = "default_true")]
+    pub keyboard: bool,
+    /// Allow mouse input from this client (`mouse` in Sunshine).
+    #[serde(default = "default_true")]
+    pub mouse: bool,
+    /// Allow controller input from this client (`controller` in Sunshine).
+    #[serde(default = "default_true")]
+    pub controller: bool,
+    /// Host sink to capture (`audio_sink`); empty lets Sunshine pick.
+    #[serde(default)]
+    pub audio_sink: String,
 }
 
 fn default_true() -> bool {
@@ -192,6 +207,10 @@ impl Default for Config {
             cursor: CursorMode::Embedded,
             audio: true,
             touch: true,
+            keyboard: true,
+            mouse: true,
+            controller: true,
+            audio_sink: String::new(),
         };
         Self {
             version: CONFIG_VERSION,
@@ -544,6 +563,14 @@ impl Config {
             }
             Err(err) => Err(ConfigError::Io(err)),
         }
+    }
+
+    /// Parse TOML, migrate and validate it (used by config import).
+    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
+        let mut config: Self = toml::from_str(text)?;
+        config.migrate();
+        config.validate()?;
+        Ok(config)
     }
 
     /// Serialize to the canonical TOML form.

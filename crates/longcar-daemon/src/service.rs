@@ -276,6 +276,73 @@ impl Daemon {
             .map_err(Into::into)
     }
 
+    #[zbus(name = "SetScreenInput")]
+    async fn set_screen_input(
+        &self,
+        screen_id: String,
+        kind: String,
+        enabled: bool,
+    ) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_screen_input(&screen_id, &kind, enabled)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "SetScreenAudioSink")]
+    async fn set_screen_audio_sink(
+        &self,
+        screen_id: String,
+        sink: String,
+    ) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_screen_audio_sink(&screen_id, &sink)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "GetAudioInfo")]
+    async fn get_audio_info(&self) -> Result<String, ServiceError> {
+        self.orchestrator.audio_info().await.map_err(Into::into)
+    }
+
+    #[zbus(name = "SetSinkVolume")]
+    async fn set_sink_volume(&self, id: u32, percent: u8) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_sink_volume(id, percent)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "SetSinkMuted")]
+    async fn set_sink_muted(&self, id: u32, muted: bool) -> Result<(), ServiceError> {
+        self.orchestrator
+            .set_sink_muted(id, muted)
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "RestoreHostAudio")]
+    async fn restore_host_audio(&self) -> Result<(), ServiceError> {
+        self.orchestrator
+            .restore_host_audio()
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "ExportConfig")]
+    async fn export_config(&self) -> Result<String, ServiceError> {
+        self.orchestrator.export_config().await.map_err(Into::into)
+    }
+
+    #[zbus(name = "ImportConfig")]
+    async fn import_config(&self, toml: String) -> Result<(), ServiceError> {
+        self.orchestrator
+            .import_config(&toml)
+            .await
+            .map_err(Into::into)
+    }
+
     #[zbus(name = "RestoreLayout")]
     async fn restore_layout(&self) -> Result<(), ServiceError> {
         self.orchestrator.restore_layout().await.map_err(Into::into)

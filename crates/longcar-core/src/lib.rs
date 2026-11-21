@@ -3,6 +3,7 @@
 //! Pure data model, configuration, layout planning and Sunshine protocol
 //! helpers shared by every Longcar component.
 
+pub mod audio;
 pub mod config;
 pub mod layout;
 pub mod logparse;
@@ -14,6 +15,7 @@ pub mod state;
 pub mod sunshine;
 pub mod sunshine_api;
 
+pub use audio::{AudioSink, default_sink, list_sinks, restore_host_default};
 pub use config::{Config, ConfigError, GeneralConfig, Preset, ScreenConfig};
 pub use model::{
     Alignment, Av1Mode, CursorMode, DaemonState, DisplayState, Encoder, HevcMode, LayoutSnapshot,

@@ -194,6 +194,10 @@ pub fn screen_entry(
         cursor: screen.cursor,
         audio: screen.audio,
         touch: screen.touch,
+        keyboard: screen.keyboard,
+        mouse: screen.mouse,
+        controller: screen.controller,
+        audio_sink: screen.audio_sink.clone(),
         logical,
         connector,
         node_id,
@@ -326,6 +330,10 @@ pub fn quick_phone_screen(config: &Config) -> (ScreenConfig, Preset) {
         cursor: CursorMode::Embedded,
         audio: true,
         touch: true,
+        keyboard: true,
+        mouse: true,
+        controller: true,
+        audio_sink: String::new(),
     };
     let mut screens = Vec::new();
     if has_tablet {
@@ -381,6 +389,10 @@ pub fn quick_tablet_screen(config: &Config) -> (ScreenConfig, Preset) {
         cursor: CursorMode::Embedded,
         audio: true,
         touch: true,
+        keyboard: true,
+        mouse: true,
+        controller: true,
+        audio_sink: String::new(),
     };
     let mut screens = config
         .preset("tablet")
@@ -488,6 +500,7 @@ pub fn apply_settings_json(
             "audioScreen" => general.audio_screen = string_field(key, value)?,
             "restoreLayoutOnStop" => general.restore_layout_on_stop = bool_field(key, value)?,
             "onboardingComplete" => general.onboarding_complete = bool_field(key, value)?,
+            "restoreHostAudio" => general.restore_host_audio = bool_field(key, value)?,
             other => {
                 return Err(DaemonError::invalid(format!(
                     "unknown settings key '{other}'"
@@ -532,7 +545,11 @@ pub fn diff_screens(old: &ScreenConfig, new: &ScreenConfig) -> ScreenDiff {
             || old.max_bitrate_kbps != new.max_bitrate_kbps
             || old.max_resolution != new.max_resolution
             || old.audio != new.audio
-            || old.touch != new.touch,
+            || old.touch != new.touch
+            || old.keyboard != new.keyboard
+            || old.mouse != new.mouse
+            || old.controller != new.controller
+            || old.audio_sink != new.audio_sink,
         slot: old.slot != new.slot,
         layout: old.position != new.position
             || old.relative_to != new.relative_to
@@ -705,6 +722,10 @@ mod tests {
         .unwrap();
         assert_eq!(general.stop_when_idle_minutes, 15);
         assert_eq!(general.default_preset, "x");
+        apply_settings_json(&mut general, r#"{"restoreHostAudio":false}"#).unwrap();
+        assert!(!general.restore_host_audio);
+        apply_settings_json(&mut general, r#"{"restoreHostAudio":true}"#).unwrap();
+        assert!(general.restore_host_audio);
         assert!(apply_settings_json(&mut general, r#"{"bogus":1}"#).is_err());
         assert!(apply_settings_json(&mut general, r#"{"notifications":"yes"}"#).is_err());
         assert!(apply_settings_json(&mut general, "not json").is_err());

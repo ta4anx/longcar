@@ -348,10 +348,11 @@ impl MutterDisplay {
     /// the connector disappears from DisplayConfig.
     pub async fn stop(mut self) -> Result<(), DisplayError> {
         self.abort_tasks();
-        if let Some(mut keepalive) = self.keepalive.take() {
-            keepalive.shutdown();
-        }
 
+        // Stop the session first: removing the virtual output must never wait on the
+        // GStreamer pipeline, whose state change can block while the PipeWire stream is
+        // stuck (a paused portal session, a compositor that went away). The pipeline is
+        // torn down afterwards, off the async path and bounded.
         let mut session_gone = false;
         let stop: zbus::Result<()> = match tokio::time::timeout(
             DISPLAY_CALL_TIMEOUT,
@@ -369,6 +370,7 @@ impl MutterDisplay {
                 return Err(DisplayError::Session(format!("Session.Stop failed: {err}")));
             }
         }
+        shutdown_pipeline_bounded(self.keepalive.take()).await;
         if session_gone {
             return Ok(());
         }
@@ -415,11 +417,27 @@ impl MutterDisplay {
     }
 }
 
+/// Turn the keepalive pipeline off without ever blocking the caller.
+///
+/// `gst::Element::set_state(Null)` is synchronous and can wait for a streaming thread that
+/// is stuck in PipeWire. The shutdown therefore runs on a blocking worker with a timeout;
+/// if it does not finish, the thread is left behind (it holds only the pipeline) and the
+/// caller proceeds.
+async fn shutdown_pipeline_bounded(keepalive: Option<Keepalive>) {
+    let Some(mut keepalive) = keepalive else {
+        return;
+    };
+    let handle = tokio::task::spawn_blocking(move || keepalive.shutdown());
+    let _ = tokio::time::timeout(Duration::from_secs(3), handle).await;
+}
+
 impl Drop for MutterDisplay {
     fn drop(&mut self) {
         self.abort_tasks();
+        // Same reasoning as `shutdown_pipeline_bounded`, but Drop cannot await: hand the
+        // pipeline to a detached thread so a stuck state change cannot block the caller.
         if let Some(mut keepalive) = self.keepalive.take() {
-            keepalive.shutdown();
+            std::thread::spawn(move || keepalive.shutdown());
         }
         // Dropping the connection makes Mutter destroy the ScreenCast session
         // and with it the virtual output.

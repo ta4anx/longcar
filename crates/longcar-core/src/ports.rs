@@ -166,6 +166,10 @@ mod tests {
             cursor: CursorMode::Embedded,
             audio: true,
             touch: true,
+            keyboard: true,
+            mouse: true,
+            controller: true,
+            audio_sink: String::new(),
         }
     }
 

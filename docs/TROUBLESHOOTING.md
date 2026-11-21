@@ -87,6 +87,23 @@ Fix in this order, per screen:
 3. Screen mode = the tablet panel (e.g. `1280x800`), client 30 fps, 8–10 Mbps; raise later.
 4. Still crashing → 1280x720@30 → 800x600.
 
+## The host speakers went silent after streaming
+
+Sunshine switches the default sink to its own virtual sink (`sink-sunshine-stereo`, …) and
+mutes the physical one while it streams. A stream killed mid-flight leaves both behind, so
+the desktop keeps playing into the virtual sink you cannot hear.
+
+- `longcarctl audio` shows the host default sink, every sink's volume/mute state, and each
+  screen's effective capture sink. A stale Sunshine sink is flagged.
+- `longcarctl audio --restore-host` puts the physical sink back (the daemon also does this
+  on startup and after the last screen stops, including the volume and mute state it
+  snapshotted before the first start).
+- The app's **Audio** page has the same "Restore host output" button plus volume and mute
+  controls per sink.
+
+If the sink is at 0 % or muted after a restore, set it back with the slider (or
+`wpctl set-volume <id> 50%`); Longcar never changes your volume on its own.
+
 ## Audio goes to the wrong device
 
 Audio is a per-screen flag (`audio`), not a global. Turn it off on a screen to let that

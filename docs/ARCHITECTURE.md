@@ -107,7 +107,13 @@ Failure records carry a stage: `Validate`, `MutterSession`, `RecordVirtual`,
 `Api`, `Io`.
 
 Per-device toggles map onto Sunshine keys: `audio` → `stream_audio`,
-`touch` → `native_pen_touch`.
+`touch` → `native_pen_touch`, `keyboard`/`mouse`/`controller` → the matching Sunshine
+keys, `audio_sink` → `audio_sink`.
+
+Host audio is snapshotted (default sink, gain, mute) before the first screen starts and
+restored after the last one stops, because Sunshine switches the default sink to its
+virtual sink and mutes the physical one while streaming; a killed stream would otherwise
+leave the desktop playing into a sink nobody hears.
 
 Daemon state is derived: `stopping` during StopAll, `starting` while a start command
 runs, `degraded` when any screen is in `error` or `layout-restore-available` is set,

@@ -39,6 +39,11 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.0" date="2026-11-21">
+      <description>
+        <p>Audio page with host sinks, per-screen capture sink and host-sink restoration; per-screen keyboard, mouse and controller switches; CLI quick controls plus configuration export and import.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-11-21">
       <description>
         <p>Per-device audio and native-touch switches, bitrate and layout quick controls in the app and the Quick Settings menu, doctor moved into Settings, and a new monitor icon.</p>

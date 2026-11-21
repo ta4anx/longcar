@@ -176,6 +176,19 @@ pub fn render_config(screen: &ScreenConfig, base_port: u16, instance_dir: &Path)
         "native_pen_touch = {}\n",
         if screen.touch { "enabled" } else { "disabled" }
     ));
+    for (key, enabled) in [
+        ("keyboard", screen.keyboard),
+        ("mouse", screen.mouse),
+        ("controller", screen.controller),
+    ] {
+        out.push_str(&format!(
+            "{key} = {}\n",
+            if enabled { "enabled" } else { "disabled" }
+        ));
+    }
+    if !screen.audio_sink.trim().is_empty() {
+        out.push_str(&format!("audio_sink = {}\n", screen.audio_sink.trim()));
+    }
     out.push_str("upnp = disabled\n");
     out.push_str("origin_web_ui_allowed = pc\n");
     out.push_str("system_tray = disabled\n");
@@ -221,6 +234,10 @@ mod tests {
             cursor: CursorMode::Embedded,
             audio: true,
             touch: true,
+            keyboard: true,
+            mouse: true,
+            controller: true,
+            audio_sink: String::new(),
         }
     }
 
@@ -270,6 +287,9 @@ mod tests {
             "max_stream_resolution = 2560x1600\n",
             "stream_audio = enabled\n",
             "native_pen_touch = enabled\n",
+            "keyboard = enabled\n",
+            "mouse = enabled\n",
+            "controller = enabled\n",
             "upnp = disabled\n",
             "origin_web_ui_allowed = pc\n",
             "system_tray = disabled\n",
@@ -337,9 +357,20 @@ mod tests {
 
         cfg.audio = false;
         cfg.touch = false;
+        cfg.keyboard = false;
+        cfg.mouse = false;
+        cfg.controller = false;
         let text = render_config(&cfg, 48050, Path::new("/i"));
         assert!(text.contains("stream_audio = disabled\n"));
         assert!(text.contains("native_pen_touch = disabled\n"));
+        assert!(text.contains("keyboard = disabled\n"));
+        assert!(text.contains("mouse = disabled\n"));
+        assert!(text.contains("controller = disabled\n"));
+        assert!(!text.contains("audio_sink"));
+
+        cfg.audio_sink = "alsa_output.speaker".to_string();
+        let text = render_config(&cfg, 48050, Path::new("/i"));
+        assert!(text.contains("audio_sink = alsa_output.speaker\n"));
     }
 
     #[test]

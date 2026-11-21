@@ -85,6 +85,31 @@ pub enum Command {
         alignment: String,
         reply: Reply,
     },
+    SetScreenInput {
+        screen: String,
+        kind: String,
+        enabled: bool,
+        reply: Reply,
+    },
+    SetScreenAudioSink {
+        screen: String,
+        sink: String,
+        reply: Reply,
+    },
+    SetSinkVolume {
+        id: u32,
+        percent: u8,
+        reply: Reply,
+    },
+    SetSinkMuted {
+        id: u32,
+        muted: bool,
+        reply: Reply,
+    },
+    GetAudioInfo(JsonReply),
+    RestoreHostAudio(Reply),
+    ExportConfig(JsonReply),
+    ImportConfig(String, Reply),
     ListPairings(String, JsonReply),
     Pair {
         screen: String,
@@ -396,6 +421,73 @@ impl Orchestrator {
             .map_err(|_| DaemonError::Unavailable("daemon stopped responding".to_string()))?
     }
 
+    /// Toggle one input device for a screen (`keyboard`, `mouse`, `controller`).
+    pub async fn set_screen_input(
+        &self,
+        screen: &str,
+        kind: &str,
+        enabled: bool,
+    ) -> Result<(), DaemonError> {
+        let screen = screen.to_string();
+        let kind = kind.to_string();
+        self.call(|reply| Command::SetScreenInput {
+            screen,
+            kind,
+            enabled,
+            reply,
+        })
+        .await
+    }
+
+    /// Capture this screen's audio from a specific host sink (empty = automatic).
+    pub async fn set_screen_audio_sink(&self, screen: &str, sink: &str) -> Result<(), DaemonError> {
+        let screen = screen.to_string();
+        let sink = sink.to_string();
+        self.call(|reply| Command::SetScreenAudioSink {
+            screen,
+            sink,
+            reply,
+        })
+        .await
+    }
+
+    /// Host sinks, the current default, and each screen's effective audio source.
+    pub async fn audio_info(&self) -> Result<String, DaemonError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(Command::GetAudioInfo(tx)).await?;
+        rx.await
+            .map_err(|_| DaemonError::Unavailable("daemon stopped responding".to_string()))?
+    }
+
+    /// Set a host sink's gain (0–100%).
+    pub async fn set_sink_volume(&self, id: u32, percent: u8) -> Result<(), DaemonError> {
+        self.call(|reply| Command::SetSinkVolume { id, percent, reply })
+            .await
+    }
+
+    /// Mute or unmute a host sink.
+    pub async fn set_sink_muted(&self, id: u32, muted: bool) -> Result<(), DaemonError> {
+        self.call(|reply| Command::SetSinkMuted { id, muted, reply })
+            .await
+    }
+
+    /// Put the host back on a physical sink when Sunshine left its virtual one default.
+    pub async fn restore_host_audio(&self) -> Result<(), DaemonError> {
+        self.call(Command::RestoreHostAudio).await
+    }
+
+    pub async fn export_config(&self) -> Result<String, DaemonError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(Command::ExportConfig(tx)).await?;
+        rx.await
+            .map_err(|_| DaemonError::Unavailable("daemon stopped responding".to_string()))?
+    }
+
+    pub async fn import_config(&self, toml: &str) -> Result<(), DaemonError> {
+        let toml = toml.to_string();
+        self.call(|reply| Command::ImportConfig(toml, reply)).await
+    }
+
     pub async fn restore_layout(&self) -> Result<(), DaemonError> {
         self.call(Command::RestoreLayout).await
     }
@@ -483,6 +575,10 @@ impl Orchestrator {
         if fix_id == "restore-layout" {
             self.restore_layout().await?;
             return Ok("applied the saved layout".to_string());
+        }
+        if fix_id == "restore-host-audio" {
+            self.restore_host_audio().await?;
+            return Ok("host audio restored to the physical sink".to_string());
         }
         if let Some(screen) = fix_id.strip_prefix("reset-instance:") {
             if !self.screen_exists(screen) {
@@ -657,6 +753,7 @@ struct Actor {
     errors: HashMap<String, StageError>,
     queue: VecDeque<Action>,
     in_flight: Option<Action>,
+    in_flight_since: Instant,
     stopping_all: bool,
     autostart_at: Option<Instant>,
     display_state: Option<DisplayState>,
@@ -681,6 +778,8 @@ struct Actor {
     clients_inflight: HashSet<String>,
     last_connector_poll: Instant,
     session_started: HashMap<String, String>,
+    /// Host output captured before the first screen started.
+    host_sink_before: Option<longcar_core::audio::HostAudioSnapshot>,
 }
 
 impl Actor {
@@ -713,6 +812,7 @@ impl Actor {
             errors: HashMap::new(),
             queue: VecDeque::new(),
             in_flight: None,
+            in_flight_since: now,
             stopping_all: false,
             autostart_at: None,
             display_state: None,
@@ -737,6 +837,7 @@ impl Actor {
             clients_inflight: HashSet::new(),
             last_connector_poll: now,
             session_started: HashMap::new(),
+            host_sink_before: None,
         }
     }
 
@@ -750,6 +851,12 @@ impl Actor {
         {
             self.applied_physical = plan::physical_entries(&state);
             self.display_state = Some(state);
+        }
+        // A stream killed before Sunshine restored the host sink leaves the desktop on
+        // `sink-sunshine-*`; put the speakers back.
+        if let Some(sink) = longcar_core::audio::restore_host_default().ok().flatten() {
+            self.logs
+                .daemon_line(format!("host audio restored to {}", sink.name));
         }
         if self.snapshot_present {
             self.warnings
@@ -807,6 +914,11 @@ impl Actor {
             .get(id)
             .copied()
             .unwrap_or(ScreenState::Off)
+    }
+
+    fn set_in_flight(&mut self, action: Option<Action>) {
+        self.in_flight_since = Instant::now();
+        self.in_flight = action;
     }
 
     fn set_state(&mut self, id: &str, state: ScreenState) {
@@ -974,6 +1086,56 @@ impl Actor {
                     .ok_or_else(|| {
                         DaemonError::Unavailable(format!("screen '{screen}' is not active"))
                     });
+                let _ = reply.send(result);
+            }
+            Command::SetScreenInput {
+                screen,
+                kind,
+                enabled,
+                reply,
+            } => {
+                let result = self.set_screen_input_command(&screen, &kind, enabled);
+                let _ = reply.send(result);
+            }
+            Command::SetScreenAudioSink {
+                screen,
+                sink,
+                reply,
+            } => {
+                let result = self
+                    .set_screen_flag_command(&screen, |s| s.audio_sink = sink.trim().to_string());
+                let _ = reply.send(result);
+            }
+            Command::SetSinkVolume { id, percent, reply } => {
+                let result = longcar_core::audio::set_volume_percent(id, percent)
+                    .map_err(|e| DaemonError::Io(e.to_string()));
+                if result.is_ok() {
+                    self.publish(false);
+                }
+                let _ = reply.send(result);
+            }
+            Command::SetSinkMuted { id, muted, reply } => {
+                let result = longcar_core::audio::set_muted(id, muted)
+                    .map_err(|e| DaemonError::Io(e.to_string()));
+                let _ = reply.send(result);
+            }
+            Command::GetAudioInfo(reply) => {
+                let result = self.audio_info_json();
+                let _ = reply.send(result);
+            }
+            Command::RestoreHostAudio(reply) => {
+                let result = self.restore_host_audio_command();
+                let _ = reply.send(result);
+            }
+            Command::ExportConfig(reply) => {
+                let result = self
+                    .config
+                    .to_toml()
+                    .map_err(|e| DaemonError::Io(format!("cannot serialise the config: {e}")));
+                let _ = reply.send(result);
+            }
+            Command::ImportConfig(toml, reply) => {
+                let result = self.import_config_command(&toml);
                 let _ = reply.send(result);
             }
             Command::RestoreLayout(reply) => {
@@ -1668,6 +1830,113 @@ impl Actor {
         Ok(())
     }
 
+    fn set_screen_input_command(
+        &mut self,
+        id: &str,
+        kind: &str,
+        enabled: bool,
+    ) -> Result<(), DaemonError> {
+        match kind.trim().to_ascii_lowercase().as_str() {
+            "keyboard" => self.set_screen_flag_command(id, |s| s.keyboard = enabled),
+            "mouse" => self.set_screen_flag_command(id, |s| s.mouse = enabled),
+            "controller" | "gamepad" => {
+                self.set_screen_flag_command(id, |s| s.controller = enabled)
+            }
+            other => Err(DaemonError::invalid(format!(
+                "unknown input '{other}' (keyboard, mouse, controller)"
+            ))),
+        }
+    }
+
+    /// Host sinks, the default, and each screen's effective capture source.
+    fn audio_info_json(&mut self) -> Result<String, DaemonError> {
+        let sinks = longcar_core::audio::list_sinks()
+            .map_err(|e| DaemonError::Io(format!("cannot list host sinks: {e}")))?;
+        let default = sinks.iter().find(|sink| sink.is_default).cloned();
+        let screens: Vec<serde_json::Value> = self
+            .config
+            .screens
+            .iter()
+            .map(|screen| {
+                let effective = if screen.audio_sink.trim().is_empty() {
+                    default.as_ref().map(|sink| sink.name.clone())
+                } else {
+                    Some(screen.audio_sink.clone())
+                };
+                serde_json::json!({
+                    "id": screen.id,
+                    "name": screen.name,
+                    "state": self.screen_state(&screen.id).as_str(),
+                    "audio": screen.audio,
+                    "audioSink": screen.audio_sink,
+                    "effectiveSink": effective,
+                })
+            })
+            .collect();
+        let stale = default
+            .as_ref()
+            .map(|sink| sink.is_sunshine())
+            .unwrap_or(false)
+            && !self
+                .state_doc
+                .screens
+                .iter()
+                .any(|screen| screen.state == ScreenState::Streaming);
+        Ok(serde_json::json!({
+            "defaultSink": default,
+            "sinks": sinks,
+            "screens": screens,
+            "staleDefault": stale,
+            "restoreHostAudio": self.config.general.restore_host_audio,
+        })
+        .to_string())
+    }
+
+    fn restore_host_audio_command(&mut self) -> Result<(), DaemonError> {
+        let restored = longcar_core::audio::restore_host_default()
+            .map_err(|e| DaemonError::Io(format!("cannot restore the host sink: {e}")))?;
+        match restored {
+            Some(sink) => {
+                self.logs
+                    .daemon_line(format!("host audio restored to {}", sink.name));
+                self.publish(false);
+                Ok(())
+            }
+            None => Err(DaemonError::Conflict(
+                "the host is already on a physical sink".to_string(),
+            )),
+        }
+    }
+
+    fn import_config_command(&mut self, toml_text: &str) -> Result<(), DaemonError> {
+        // Refuse while anything is being prepared as well: a start that is still creating
+        // its output would otherwise install a runtime from the old configuration.
+        if self.runtimes.values().any(|_| true)
+            || self
+                .state_doc
+                .screens
+                .iter()
+                .any(|screen| screen.state.is_active() || screen.state == ScreenState::Stopping)
+        {
+            return Err(DaemonError::conflict(
+                "stop every screen before importing a configuration",
+            ));
+        }
+        let config = Config::from_toml(toml_text)
+            .map_err(|e| DaemonError::invalid(format!("config is not usable: {e}")))?;
+        let backup = self.config.clone();
+        self.config = config;
+        if let Err(err) = self.save_config() {
+            self.config = backup;
+            return Err(err);
+        }
+        self.notifier.set_enabled(self.config.general.notifications);
+        self.layout_user_modified = false;
+        self.idle_deadline = None;
+        self.publish(false);
+        Ok(())
+    }
+
     async fn restore_layout_command(&mut self) -> Result<(), DaemonError> {
         if !self.runtimes.is_empty() {
             return Err(DaemonError::conflict(
@@ -1751,11 +2020,11 @@ impl Actor {
                     self.set_state(&id, ScreenState::Preparing);
                     self.clear_error(&id);
                     self.spawn_start(&id);
-                    self.in_flight = Some(action);
+                    self.set_in_flight(Some(action));
                 }
                 Action::Stop(id) => {
                     if self.spawn_stop(&id, StopCause::User) {
-                        self.in_flight = Some(action);
+                        self.set_in_flight(Some(action));
                     }
                 }
             }
@@ -1925,6 +2194,11 @@ impl Actor {
             })
             .collect();
         let need_snapshot = !self.snapshot_present;
+        if self.host_sink_before.is_none()
+            && let Ok(Some(snapshot)) = longcar_core::audio::snapshot_host()
+        {
+            self.host_sink_before = Some(snapshot);
+        }
         self.suppress_until = Some(Instant::now() + Duration::from_secs(5));
         let tx = self.evt_tx.clone();
         let logs = self.logs.clone();
@@ -1943,7 +2217,7 @@ impl Actor {
     async fn handle_event(&mut self, event: ActorEvent) {
         match event {
             ActorEvent::Started { screen, result } => {
-                self.in_flight = None;
+                self.set_in_flight(None);
                 match *result {
                     Ok(started) => {
                         if started.snapshot_written {
@@ -2058,7 +2332,7 @@ impl Actor {
                 error,
                 result,
             } => {
-                self.in_flight = None;
+                self.set_in_flight(None);
                 if let Err(message) = result {
                     self.logs
                         .screen_line(&screen, format!("stop reported: {message}"));
@@ -2099,7 +2373,7 @@ impl Actor {
                         &format!("The stream for '{screen}' stopped unexpectedly"),
                     );
                     if self.spawn_stop(&screen, StopCause::Rollback) {
-                        self.in_flight = Some(Action::Stop(screen.clone()));
+                        self.set_in_flight(Some(Action::Stop(screen.clone())));
                     }
                     self.publish(false);
                 }
@@ -2259,7 +2533,7 @@ impl Actor {
                         &format!("The stream for '{screen}' stopped"),
                     );
                     if self.spawn_stop(screen, StopCause::Rollback) {
-                        self.in_flight = Some(Action::Stop(screen.to_string()));
+                        self.set_in_flight(Some(Action::Stop(screen.to_string())));
                     }
                     self.publish(false);
                 }
@@ -2345,7 +2619,18 @@ impl Actor {
                 self.enter_waiting_portal(screen, &message);
             }
             InstanceEvent::Log(LogEvent::Fatal(message)) => {
-                if self.screen_state(screen) == ScreenState::WaitingPortal {
+                // Sunshine probes capture during startup, before the picker can be
+                // answered; while no portal token exists that probe is expected to fail
+                // and the screen is still waiting for approval, not broken.
+                let awaiting_approval = matches!(
+                    self.screen_state(screen),
+                    ScreenState::Starting | ScreenState::WaitingPortal
+                ) && self
+                    .runtimes
+                    .get(screen)
+                    .map(|runtime| !runtime.instance.portal_token_present())
+                    .unwrap_or(false);
+                if awaiting_approval {
                     // Sunshine gives up on pause: its capture probe runs before the
                     // picker can be answered. The portal request is still open and the
                     // token restarts it, so keep waiting for approval instead.
@@ -2366,7 +2651,7 @@ impl Actor {
                     &format!("The stream for '{screen}' failed"),
                 );
                 if self.spawn_stop(screen, StopCause::Rollback) {
-                    self.in_flight = Some(Action::Stop(screen.to_string()));
+                    self.set_in_flight(Some(Action::Stop(screen.to_string())));
                 }
                 self.publish(false);
             }
@@ -2498,7 +2783,7 @@ impl Actor {
                 &format!("The virtual output for '{id}' was closed by GNOME"),
             );
             if self.spawn_stop(&id, StopCause::Rollback) {
-                self.in_flight = Some(Action::Stop(id));
+                self.set_in_flight(Some(Action::Stop(id)));
             }
         }
         self.publish(false);
@@ -2558,7 +2843,7 @@ impl Actor {
                 self.warnings
                     .insert(longcar_core::model::warnings::PORTAL_TIMEOUT.to_string());
                 if self.spawn_stop(&id, StopCause::Rollback) {
-                    self.in_flight = Some(Action::Stop(id));
+                    self.set_in_flight(Some(Action::Stop(id)));
                 }
                 self.publish(false);
             }
@@ -2575,6 +2860,33 @@ impl Actor {
                 let _ = self.stop_all();
                 self.process_queue().await;
             }
+        }
+
+        // A stop/start whose background task never reports back must not leave a screen
+        // spinning in `stopping` forever (Mutter or Sunshine can wedge).
+        if let (Some(action), true) = (
+            &self.in_flight,
+            self.in_flight_since.elapsed() >= Duration::from_secs(45),
+        ) {
+            let action = action.clone();
+            let (id, message) = match &action {
+                Action::Start(id) => (id.clone(), "start did not finish within 45 s"),
+                Action::Stop(id) => (id.clone(), "stop did not finish within 45 s"),
+            };
+            self.logs.screen_line(&id, message);
+            self.set_in_flight(None);
+            match action {
+                Action::Start(_) => {
+                    self.set_error(&id, StageError::new(Stage::MutterSession, message));
+                }
+                Action::Stop(_) => {
+                    self.set_state(&id, ScreenState::Off);
+                    self.clear_error(&id);
+                }
+            }
+            self.stopping_all = false;
+            self.publish(false);
+            self.process_queue().await;
         }
 
         if self.last_pairs_poll.elapsed() >= PAIRS_POLL {
@@ -2679,6 +2991,12 @@ impl Actor {
         {
             self.applied_physical = plan::physical_entries(&state);
             self.display_state = Some(state);
+        }
+        // A stream killed before Sunshine restored the host sink leaves the desktop on
+        // `sink-sunshine-*`; put the speakers back.
+        if let Some(sink) = longcar_core::audio::restore_host_default().ok().flatten() {
+            self.logs
+                .daemon_line(format!("host audio restored to {}", sink.name));
         }
         self.publish(false);
     }

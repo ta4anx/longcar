@@ -120,6 +120,14 @@ pub struct ScreenEntry {
     pub audio: bool,
     #[serde(default = "default_true")]
     pub touch: bool,
+    #[serde(default = "default_true")]
+    pub keyboard: bool,
+    #[serde(default = "default_true")]
+    pub mouse: bool,
+    #[serde(default = "default_true")]
+    pub controller: bool,
+    #[serde(default)]
+    pub audio_sink: String,
     #[serde(default)]
     pub logical: Option<Rect>,
     #[serde(default)]
@@ -177,6 +185,8 @@ pub struct SettingsEntry {
     pub audio_screen: String,
     pub restore_layout_on_stop: bool,
     pub onboarding_complete: bool,
+    #[serde(default = "default_true")]
+    pub restore_host_audio: bool,
 }
 
 impl Default for SettingsEntry {
@@ -195,6 +205,7 @@ impl From<&GeneralConfig> for SettingsEntry {
             audio_screen: general.audio_screen.clone(),
             restore_layout_on_stop: general.restore_layout_on_stop,
             onboarding_complete: general.onboarding_complete,
+            restore_host_audio: general.restore_host_audio,
         }
     }
 }
@@ -209,6 +220,7 @@ impl SettingsEntry {
         general.audio_screen = self.audio_screen.clone();
         general.restore_layout_on_stop = self.restore_layout_on_stop;
         general.onboarding_complete = self.onboarding_complete;
+        general.restore_host_audio = self.restore_host_audio;
     }
 }
 
@@ -310,6 +322,7 @@ mod tests {
             "encoder": "auto", "hevc": "auto", "av1": "off",
             "maxBitrateKbps": 30000, "maxResolution": "2560x1600", "cursor": "embedded",
             "audio": true, "touch": true,
+            "keyboard": true, "mouse": true, "controller": true, "audioSink": "",
             "logical": null,
             "connector": null, "nodeId": null,
             "basePort": 48049, "webPort": 48050,
@@ -322,7 +335,7 @@ mod tests {
             "scale": 1.25, "transform": 0, "primary": true
         }],
         "presets": [{"id": "tablet", "name": "Tablet", "screens": ["tablet"]}],
-        "settings": {"autostartScreens": false, "notifications": true, "stopWhenIdleMinutes": 0, "defaultPreset": "tablet", "audioScreen": "tablet", "restoreLayoutOnStop": true, "onboardingComplete": false},
+        "settings": {"autostartScreens": false, "notifications": true, "stopWhenIdleMinutes": 0, "defaultPreset": "tablet", "audioScreen": "tablet", "restoreLayoutOnStop": true, "onboardingComplete": false, "restoreHostAudio": true},
         "pendingPairings": [], "devices": [],
         "host": {"addresses": [{"interface": "wlp3s0", "address": "192.168.2.11", "kind": "wifi", "preferred": true}]},
         "warnings": []
@@ -355,6 +368,7 @@ mod tests {
                 "alignment": "center", "encoder": "auto", "hevc": "auto", "av1": "off",
                 "maxBitrateKbps": 30000, "maxResolution": "2560x1600", "cursor": "embedded",
             "audio": true, "touch": true,
+            "keyboard": true, "mouse": true, "controller": true, "audioSink": "",
                 "basePort": 48049, "webPort": 48050
             }],
             "settings": {
@@ -382,6 +396,7 @@ mod tests {
     #[test]
     fn settings_general_config_round_trip() {
         let general = GeneralConfig {
+            restore_host_audio: true,
             autostart_screens: true,
             notifications: false,
             stop_when_idle_minutes: 15,
@@ -509,6 +524,10 @@ mod tests {
             cursor: CursorMode::Embedded,
             audio: true,
             touch: true,
+            keyboard: true,
+            mouse: true,
+            controller: true,
+            audio_sink: String::new(),
             logical: Some(Rect::new(1536, 0, 1707, 1067)),
             connector: Some("Meta-0".to_string()),
             node_id: Some(42),

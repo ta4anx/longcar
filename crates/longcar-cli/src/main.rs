@@ -47,6 +47,22 @@ trait Daemon {
     fn remove_screen(&self, id: &str, purge: bool) -> zbus::Result<()>;
     fn apply_preset(&self, preset_id: &str) -> zbus::Result<()>;
     fn set_audio_screen(&self, id: &str) -> zbus::Result<()>;
+    fn set_screen_audio(&self, screen_id: &str, enabled: bool) -> zbus::Result<()>;
+    fn set_screen_touch(&self, screen_id: &str, enabled: bool) -> zbus::Result<()>;
+    fn set_screen_bitrate(&self, screen_id: &str, kbps: u32) -> zbus::Result<()>;
+    fn set_screen_layout(
+        &self,
+        screen_id: &str,
+        position: &str,
+        relative_to: &str,
+        alignment: &str,
+    ) -> zbus::Result<()>;
+    fn set_screen_input(&self, screen_id: &str, kind: &str, enabled: bool) -> zbus::Result<()>;
+    fn set_screen_audio_sink(&self, screen_id: &str, sink: &str) -> zbus::Result<()>;
+    fn get_audio_info(&self) -> zbus::Result<String>;
+    fn restore_host_audio(&self) -> zbus::Result<()>;
+    fn export_config(&self) -> zbus::Result<String>;
+    fn import_config(&self, toml: &str) -> zbus::Result<()>;
     fn list_pairings(&self, screen_id: &str) -> zbus::Result<String>;
     fn pair(&self, screen_id: &str, pairing_id: &str, pin: &str, name: &str) -> zbus::Result<bool>;
     fn unpair(&self, screen_id: &str, uuid: &str) -> zbus::Result<()>;
@@ -196,10 +212,27 @@ enum Command {
         #[arg(long = "self-test")]
         self_test: bool,
     },
-    /// Route streamed audio to one screen, or turn it off everywhere.
-    ///
-    /// `longcarctl audio off` leaves sound on the device's own speakers.
-    Audio { target: String },
+    /// Audio routing: no arguments shows host sinks, `off`/`SCREEN` picks the legacy
+    /// single-audio view, `--restore-host` puts the host speakers back.
+    Audio {
+        target: Option<String>,
+        /// Put the host back on a physical sink (undo a stale Sunshine sink).
+        #[arg(long = "restore-host")]
+        restore_host: bool,
+    },
+    /// Print the configuration as TOML (for backups or another machine).
+    Export {
+        /// Write to a file instead of stdout.
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
+    /// Replace the configuration from a TOML file.
+    Import {
+        file: String,
+        /// Do not ask for confirmation.
+        #[arg(long)]
+        yes: bool,
+    },
     /// Apply a doctor fix.
     Fix { fix_id: String },
     /// Print daemon and screen logs.
@@ -250,6 +283,40 @@ enum ScreensCommand {
         #[arg(long)]
         yes: bool,
     },
+    /// Apply a bitrate preset (kbps, `0` removes the cap).
+    Bitrate { id: String, kbps: u32 },
+    /// Move a screen next to `--relative-to` (default: its current reference).
+    Position {
+        id: String,
+        /// left, right, above or below.
+        position: String,
+        #[arg(long = "relative-to")]
+        relative_to: Option<String>,
+        #[arg(long)]
+        alignment: Option<String>,
+    },
+    /// Stream this screen's audio to its client.
+    Audio {
+        id: String,
+        /// on or off.
+        state: String,
+    },
+    /// Send native pen/touch events for this screen.
+    Touch {
+        id: String,
+        /// on or off.
+        state: String,
+    },
+    /// Allow keyboard, mouse or controller input from this screen's client.
+    Input {
+        id: String,
+        /// keyboard, mouse or controller.
+        kind: String,
+        /// on or off.
+        state: String,
+    },
+    /// Capture this screen's audio from a host sink (`auto` clears the override).
+    Sink { id: String, sink: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -337,7 +404,12 @@ async fn run() -> CliResult<()> {
         Command::Network { command } => network(command).await,
         Command::Doctor { json, self_test } => doctor(json, self_test).await,
         Command::Fix { fix_id } => fix(&fix_id).await,
-        Command::Audio { target } => audio(target).await,
+        Command::Audio {
+            target,
+            restore_host,
+        } => audio(target, restore_host).await,
+        Command::Export { output } => export_config(output).await,
+        Command::Import { file, yes } => import_config(&file, yes).await,
         Command::Logs { n, json } => logs(n, json).await,
         Command::RestoreLayout => restore_layout().await,
         Command::DiscardLayout => discard_layout().await,
@@ -638,6 +710,85 @@ async fn screens(command: ScreensCommand) -> CliResult<()> {
         ScreensCommand::Add { json } => screens_add(&json).await,
         ScreensCommand::Update { id, json } => screens_update(&id, &json).await,
         ScreensCommand::Remove { id, purge, yes } => screens_remove(&id, purge, yes).await,
+        ScreensCommand::Bitrate { id, kbps } => {
+            let proxy = connect().await?;
+            proxy
+                .set_screen_bitrate(&id, kbps)
+                .await
+                .map_err(map_zbus)?;
+            println!(
+                "{}",
+                if kbps == 0 {
+                    format!("{id}: bitrate cap removed")
+                } else {
+                    format!("{id}: {kbps} kbps cap")
+                }
+            );
+            Ok(())
+        }
+        ScreensCommand::Position {
+            id,
+            position,
+            relative_to,
+            alignment,
+        } => {
+            let proxy = connect().await?;
+            let state = fetch_state(&proxy).await?;
+            let screen = state
+                .screens
+                .iter()
+                .find(|screen| screen.id == id)
+                .ok_or_else(|| failed(format!("screen '{id}' is not configured")))?;
+            let relative = relative_to.unwrap_or_else(|| screen.relative_to.clone());
+            let align = alignment.unwrap_or_else(|| alignment_name(screen.alignment));
+            proxy
+                .set_screen_layout(&id, &position, &relative, &align)
+                .await
+                .map_err(map_zbus)?;
+            println!("{id}: placed {position} of {relative} ({align})");
+            Ok(())
+        }
+        ScreensCommand::Audio { id, state } => {
+            let proxy = connect().await?;
+            proxy
+                .set_screen_audio(&id, parse_on_off(&state)?)
+                .await
+                .map_err(map_zbus)?;
+            println!("{id}: audio {state}");
+            Ok(())
+        }
+        ScreensCommand::Touch { id, state } => {
+            let proxy = connect().await?;
+            proxy
+                .set_screen_touch(&id, parse_on_off(&state)?)
+                .await
+                .map_err(map_zbus)?;
+            println!("{id}: native touch {state}");
+            Ok(())
+        }
+        ScreensCommand::Input { id, kind, state } => {
+            let proxy = connect().await?;
+            proxy
+                .set_screen_input(&id, &kind, parse_on_off(&state)?)
+                .await
+                .map_err(map_zbus)?;
+            println!("{id}: {kind} input {state}");
+            Ok(())
+        }
+        ScreensCommand::Sink { id, sink } => {
+            let proxy = connect().await?;
+            let sink = if sink == "auto" { String::new() } else { sink };
+            proxy
+                .set_screen_audio_sink(&id, &sink)
+                .await
+                .map_err(map_zbus)?;
+            if sink.is_empty() {
+                println!("{id}: audio sink follows the host default");
+            } else {
+                println!("{id}: capturing {sink}");
+            }
+            Ok(())
+        }
     }
 }
 
@@ -1198,19 +1349,120 @@ fn print_doctor(raw: &str) -> CliResult<()> {
     Ok(())
 }
 
-async fn audio(target: String) -> CliResult<()> {
+async fn audio(target: Option<String>, restore_host: bool) -> CliResult<()> {
+    let proxy = connect().await?;
+    if restore_host {
+        proxy.restore_host_audio().await.map_err(map_zbus)?;
+        println!("host audio restored to the physical sink");
+        return Ok(());
+    }
+    let Some(target) = target else {
+        let raw = proxy.get_audio_info().await.map_err(map_zbus)?;
+        let info: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|err| failed(format!("invalid audio payload: {err}")))?;
+        let default = info
+            .get("defaultSink")
+            .and_then(|sink| sink.get("name"))
+            .and_then(|name| name.as_str())
+            .unwrap_or("<none>");
+        println!("host default sink: {default}");
+        if info
+            .get("staleDefault")
+            .and_then(|stale| stale.as_bool())
+            .unwrap_or(false)
+        {
+            println!(
+                "  warning: Sunshine's virtual sink is still default; run `longcarctl audio --restore-host`"
+            );
+        }
+        println!("sinks:");
+        for sink in info["sinks"].as_array().into_iter().flatten() {
+            let volume = (sink["volume"].as_f64().unwrap_or(1.0) * 100.0).round() as i64;
+            println!(
+                "  {} {:<4} {:<32} {:>3}%{:<7} {}",
+                if sink["isDefault"].as_bool().unwrap_or(false) {
+                    "*"
+                } else {
+                    " "
+                },
+                sink["id"].as_u64().unwrap_or(0),
+                sink["name"].as_str().unwrap_or(""),
+                volume,
+                if sink["muted"].as_bool().unwrap_or(false) {
+                    " MUTED"
+                } else {
+                    ""
+                },
+                sink["description"].as_str().unwrap_or("")
+            );
+        }
+        println!("screens:");
+        for screen in info["screens"].as_array().into_iter().flatten() {
+            println!(
+                "  {:<12} audio={:<5} sink={}",
+                screen["id"].as_str().unwrap_or(""),
+                screen["audio"].as_bool().unwrap_or(false),
+                screen["effectiveSink"].as_str().unwrap_or("<none>")
+            );
+        }
+        return Ok(());
+    };
     let id = if matches!(target.as_str(), "off" | "none" | "local") {
         String::new()
     } else {
         target
     };
-    let proxy = connect().await?;
     proxy.set_audio_screen(&id).await.map_err(map_zbus)?;
     if id.is_empty() {
         println!("audio disabled on every screen (devices use their own speakers)");
     } else {
         println!("audio routed to {id}");
     }
+    Ok(())
+}
+
+fn parse_on_off(value: &str) -> CliResult<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "on" | "true" | "yes" | "enabled" => Ok(true),
+        "off" | "false" | "no" | "disabled" => Ok(false),
+        other => Err(failed(format!("expected on or off, got '{other}'"))),
+    }
+}
+
+fn alignment_name(alignment: longcar_core::model::Alignment) -> String {
+    match alignment {
+        longcar_core::model::Alignment::Start => "start",
+        longcar_core::model::Alignment::Center => "center",
+        longcar_core::model::Alignment::End => "end",
+    }
+    .to_string()
+}
+
+async fn export_config(output: Option<String>) -> CliResult<()> {
+    let proxy = connect().await?;
+    let toml_text = proxy.export_config().await.map_err(map_zbus)?;
+    match output {
+        Some(path) => {
+            std::fs::write(&path, &toml_text)
+                .map_err(|err| failed(format!("cannot write {path}: {err}")))?;
+            println!("wrote {path}");
+        }
+        None => print!("{toml_text}"),
+    }
+    Ok(())
+}
+
+async fn import_config(path: &str, yes: bool) -> CliResult<()> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|err| failed(format!("cannot read {path}: {err}")))?;
+    if !yes {
+        return Err(failed(
+            "importing replaces every screen and preset; re-run with --yes to confirm",
+        ));
+    }
+    let proxy = connect().await?;
+    proxy.import_config(&text).await.map_err(map_zbus)?;
+    println!("configuration imported from {path}");
     Ok(())
 }
 

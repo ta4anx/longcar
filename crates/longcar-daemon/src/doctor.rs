@@ -228,6 +228,54 @@ fn ports_check(config: &Config, active_screens: &[String]) -> (CheckStatus, Stri
     }
 }
 
+/// Host sinks, the default sink, and whether a screen's configured sink exists.
+fn audio_check(config: &Config, active_screens: &[String]) -> (CheckStatus, String) {
+    let sinks = match longcar_core::audio::list_sinks() {
+        Ok(sinks) => sinks,
+        Err(err) => return (CheckStatus::Warn, format!("cannot list host sinks: {err}")),
+    };
+    if sinks.is_empty() {
+        return (CheckStatus::Warn, "no host audio sinks found".to_string());
+    }
+    let default = sinks.iter().find(|sink| sink.is_default);
+    let mut problems = Vec::new();
+    for screen in &config.screens {
+        if screen.audio_sink.trim().is_empty() {
+            continue;
+        }
+        if !sinks.iter().any(|sink| sink.name == screen.audio_sink) {
+            problems.push(format!(
+                "screen '{}' wants missing sink '{}'",
+                screen.id, screen.audio_sink
+            ));
+        }
+    }
+    let stale =
+        default.map(|sink| sink.is_sunshine()).unwrap_or(false) && active_screens.is_empty();
+    let default_label = default
+        .map(|sink| format!("{} ({})", sink.name, sink.description))
+        .unwrap_or_else(|| "<none>".to_string());
+    if stale {
+        return (
+            CheckStatus::Warn,
+            format!(
+                "the default sink is Sunshine's '{}' while no screen is streaming; the host speakers are muted",
+                default.map(|sink| sink.name.clone()).unwrap_or_default()
+            ),
+        );
+    }
+    if !problems.is_empty() {
+        return (CheckStatus::Error, problems.join("; "));
+    }
+    (
+        CheckStatus::Ok,
+        format!(
+            "default sink: {default_label}; {} sink(s) available",
+            sinks.len()
+        ),
+    )
+}
+
 /// Gather the full doctor report.
 /// `active_screens` are screens that are running (or hold a virtual output); their own
 /// ports are busy by definition and must not be reported as conflicts.
@@ -708,7 +756,16 @@ pub async fn collect(
     let (port_status, port_detail) = ports_check(config, active_screens);
     checks.push(check("ports", "Port families", port_status, port_detail));
 
-    // 12. Pending layout snapshot.
+    // 12. Host audio.
+    let (audio_status, audio_detail) = audio_check(config, active_screens);
+    let audio = check("audio", "Host audio", audio_status, audio_detail);
+    checks.push(if audio_status == CheckStatus::Ok {
+        audio
+    } else {
+        with_fix(audio, "restore-host-audio")
+    });
+
+    // 13. Pending layout snapshot.
     if snapshot_present {
         checks.push(with_fix(
             check(
@@ -728,7 +785,7 @@ pub async fn collect(
         ));
     }
 
-    // 13. Quick Settings extension.
+    // 14. Quick Settings extension.
     let installed = extension_installed();
     let enabled = enabled_extensions().iter().any(|id| id == EXTENSION_UUID);
     let extension = if installed && enabled {
@@ -763,7 +820,7 @@ pub async fn collect(
     };
     checks.push(extension);
 
-    // 14. Unique screen resolutions.
+    // 15. Unique screen resolutions.
     let duplicates = match config.validate() {
         Ok(()) => check(
             "duplicates",
@@ -956,6 +1013,10 @@ mod tests {
             cursor: CursorMode::Embedded,
             audio: true,
             touch: true,
+            keyboard: true,
+            mouse: true,
+            controller: true,
+            audio_sink: String::new(),
         }
     }
 

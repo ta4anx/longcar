@@ -46,8 +46,8 @@ display.
 | --- | --- |
 | 🖥️ **Virtual outputs** | Any resolution/refresh the GPU supports, scale clamped to Mutter's list, placed left/right/above/below with start/center/end alignment |
 | 🎛️ **Presets** | Start a set of screens with one click; preset editing in the app |
-| 📱 **Per-device audio** | Stream audio to each device, or mute it so the tablet uses its own speakers |
-| 👆 **Touch control** | Choose native touchscreen events or pointer-style input, per device |
+| 📱 **Audio page** | Per-device routing, host sink choice, volume/mute per sink, and a guard that restores your speakers after a killed stream |
+| 👆 **Input per device** | Touchscreen vs pointer, and keyboard / mouse / controller switches per screen |
 | ⚡ **Quick bitrate/layout** | 4–30 Mbps presets and position changes from the app rows *and* the Quick Settings menu |
 | 🔌 **Pairing** | PIN approval and client management (enable/disable/unpair) from the app or `longcarctl` |
 | 🩺 **Doctor** | 14 checks (session, Mutter, portal, Sunshine, GStreamer, ports, uinput, extension…) with one-click fixes, now inside Settings |
@@ -126,16 +126,22 @@ Shell, so the tile shows exactly the daemon's state.
 
 - **Behavior** — start screens at login, notifications, stop when idle, restore the
   desktop layout on stop.
-- **Screens** — default preset, per-device **audio** switches plus a master
-  *Stream audio to clients* switch.
+- **Audio** — host output (default sink, volume, mute, *Restore host output*), the host
+  sink list, and per-screen routing with an optional capture sink.
 - **Diagnostics** (formerly the Doctor page) — the 14 checks, fixes, the display
   self-test, and copyable diagnostics.
 
 <img src="docs/screenshots/diagnostics.png" alt="Diagnostics inside Settings">
 
-The Screens page carries the fast controls: audio, native touch, bitrate preset, and
-position for each screen, applied immediately (audio/touch/bitrate restart that screen's
-unit, so the stream has to be stopped first; position changes apply live).
+The Screens page carries the fast controls: audio, native touch, an **Input** menu
+(keyboard/mouse/controller), a bitrate preset and a position picker for each screen. Audio,
+input and bitrate changes restart that screen's unit, so a live stream has to be stopped
+first; position changes apply live.
+
+The Audio page is the detailed mixer: it lists every host sink with volume and mute state,
+lets you pin a screen's capture to a specific sink, warns when Sunshine's virtual sink is
+still the host default, and restores the host sink, volume and mute state when screens stop
+(see `longcarctl audio --restore-host` for the manual escape hatch).
 
 ## CLI
 
@@ -145,7 +151,12 @@ longcarctl stop [--screen ID]       longcarctl screens list|add|update|remove
 longcarctl presets list|start ID    longcarctl devices pending|list|pair|unpair|enable|disable
 longcarctl doctor [--json] [--self-test]   longcarctl fix FIX_ID
 longcarctl network hosts|ports      longcarctl logs -n 200
-longcarctl audio off|SCREEN         longcarctl restore-layout | discard-layout
+longcarctl audio [off|SCREEN] [--restore-host]   longcarctl audio   # sink overview
+longcarctl screens bitrate ID KBPS | position ID left|right|above|below
+longcarctl screens audio|touch ID on|off | input ID keyboard|mouse|controller on|off
+longcarctl screens sink ID NAME|auto
+longcarctl export [-o FILE] | import FILE --yes
+longcarctl restore-layout | discard-layout
 longcarctl setup [--extension-only|--service-only]
 ```
 
