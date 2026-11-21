@@ -311,6 +311,29 @@
                       </object>
                     </child>
                     <child>
+                      <object class="AdwSwitchRow" id="keyboard_switch">
+                        <property name="title">Keyboard input</property>
+                        <property name="subtitle">Allow this client to send keyboard input</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwSwitchRow" id="mouse_switch">
+                        <property name="title">Mouse input</property>
+                        <property name="subtitle">Allow this client to send pointer input</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwSwitchRow" id="controller_switch">
+                        <property name="title">Controller input</property>
+                        <property name="subtitle">Allow this client to send gamepad input</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwEntryRow" id="audio_sink_entry">
+                        <property name="title">Audio sink (empty follows the host output)</property>
+                      </object>
+                    </child>
+                    <child>
                       <object class="AdwActionRow">
                         <property name="title">Max bitrate</property>
                         <property name="subtitle">kbps; 0 leaves it to Sunshine</property>

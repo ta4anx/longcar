@@ -6,7 +6,6 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
-use longcar_core::model::ScreenState;
 use longcar_core::state::StateDoc;
 use serde_json::json;
 
@@ -29,12 +28,10 @@ struct Inner {
     restore_layout: adw::SwitchRow,
     preset_dropdown: gtk::DropDown,
     preset_ids: RefCell<Vec<String>>,
-    audio_master: adw::SwitchRow,
-    audio_list: gtk::ListBox,
-    audio_signature: RefCell<String>,
     doctor: Rc<DoctorPage>,
     doctor_loaded: Cell<bool>,
     default_preset_row: adw::ActionRow,
+    audio_row: adw::ActionRow,
     extension_row: adw::ActionRow,
     daemon_row: adw::ActionRow,
     logs_row: adw::ActionRow,
@@ -57,13 +54,7 @@ impl SettingsPage {
         let default_preset_row: adw::ActionRow = builder
             .object("default_preset_row")
             .expect("default preset row");
-        let audio_master: adw::SwitchRow = builder
-            .object("audio_master_switch")
-            .expect("audio master switch");
-        let audio_list: gtk::ListBox = builder
-            .object("audio_screens_list")
-            .expect("audio screens list");
-        audio_list.add_css_class("boxed-list");
+        let audio_row: adw::ActionRow = builder.object("audio_row").expect("audio row");
         let extension_row: adw::ActionRow = builder.object("extension_row").expect("extension row");
         let daemon_row: adw::ActionRow = builder.object("daemon_row").expect("daemon row");
         let logs_row: adw::ActionRow = builder.object("logs_row").expect("logs row");
@@ -93,12 +84,10 @@ impl SettingsPage {
                 restore_layout,
                 preset_dropdown,
                 preset_ids: RefCell::new(Vec::new()),
-                audio_master,
-                audio_list,
-                audio_signature: RefCell::new(String::new()),
                 doctor,
                 doctor_loaded: Cell::new(false),
                 default_preset_row,
+                audio_row,
                 extension_row,
                 daemon_row,
                 logs_row,
@@ -194,53 +183,11 @@ impl SettingsPage {
                 });
         }
         {
-            let inner = self.inner.clone();
-            self.inner.audio_master.connect_active_notify(move |row| {
-                if inner.syncing.get() {
-                    return;
-                }
-                let enabled = row.is_active();
-                let Some(state) = inner.ctx.state() else {
-                    return;
-                };
-                let targets: Vec<String> = state
-                    .screens
-                    .iter()
-                    .filter(|screen| screen.audio != enabled)
-                    .map(|screen| screen.id.clone())
-                    .collect();
-                if targets.is_empty() {
-                    return;
-                }
-                let Some(client) = inner.ctx.client() else {
-                    inner.ctx.toast("The Longcar daemon is unavailable");
-                    revert_master(&inner);
-                    return;
-                };
-                let inner = inner.clone();
-                glib::spawn_future_local(async move {
-                    if !enabled {
-                        match client.set_audio_screen("").await {
-                            Ok(()) => {
-                                inner.ctx.toast("Audio disabled for every screen");
-                            }
-                            Err(err) => {
-                                inner.ctx.toast_err("Could not update audio routing", &err);
-                                revert_master(&inner);
-                            }
-                        }
-                        return;
-                    }
-                    for id in targets {
-                        if let Err(err) = client.set_screen_audio(&id, enabled).await {
-                            inner.ctx.toast_err("Could not update audio routing", &err);
-                            revert_master(&inner);
-                            return;
-                        }
-                    }
-                    inner.ctx.toast("Audio enabled for every screen");
-                });
-            });
+            let ctx = self.inner.ctx.clone();
+            let open = util::text_button("Open", "Open the Audio page");
+            open.connect_clicked(move |_| (ctx.select_page)("audio"));
+            self.inner.audio_row.add_suffix(&open);
+            self.inner.audio_row.set_activatable_widget(Some(&open));
         }
         {
             let ctx = self.inner.ctx.clone();
@@ -318,23 +265,6 @@ impl SettingsPage {
         self.inner.preset_dropdown.set_selected(preset_index as u32);
         *self.inner.preset_ids.borrow_mut() = preset_ids;
 
-        // Audio master switch and per-screen routing.
-        let streaming_any = state
-            .screens
-            .iter()
-            .any(|screen| screen.state == ScreenState::Streaming);
-        self.inner.audio_master.set_active(
-            !state.screens.is_empty() && state.screens.iter().all(|screen| screen.audio),
-        );
-        self.inner.audio_master.set_sensitive(!streaming_any);
-        self.inner
-            .audio_master
-            .set_tooltip_text(Some(if streaming_any {
-                "Unavailable while a screen is streaming"
-            } else {
-                "Turns audio on or off for every screen"
-            }));
-        rebuild_audio_rows(&self.inner, state);
         self.inner
             .default_preset_row
             .set_sensitive(!state.presets.is_empty());
@@ -346,97 +276,6 @@ impl SettingsPage {
             self.inner.doctor.activate();
         }
     }
-}
-
-fn revert_master(inner: &Rc<Inner>) {
-    let active = inner.ctx.state().is_some_and(|state| {
-        !state.screens.is_empty() && state.screens.iter().all(|screen| screen.audio)
-    });
-    inner.syncing.set(true);
-    inner.audio_master.set_active(active);
-    inner.syncing.set(false);
-}
-
-fn rebuild_audio_rows(inner: &Rc<Inner>, state: &StateDoc) {
-    let signature = state
-        .screens
-        .iter()
-        .map(|screen| {
-            format!(
-                "{}|{}|{}|{}",
-                screen.id,
-                screen.name,
-                screen.audio,
-                screen.state == ScreenState::Streaming
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\u{1f}");
-    if *inner.audio_signature.borrow() == signature {
-        return;
-    }
-    *inner.audio_signature.borrow_mut() = signature;
-
-    while let Some(child) = inner.audio_list.first_child() {
-        inner.audio_list.remove(&child);
-    }
-    if state.screens.is_empty() {
-        inner
-            .audio_list
-            .append(&util::dim_label("No screens are configured"));
-        return;
-    }
-    for screen in &state.screens {
-        let streaming = screen.state == ScreenState::Streaming;
-        let row = adw::SwitchRow::builder()
-            .title(format!("{} audio", screen.name))
-            .subtitle(if streaming {
-                "Unavailable while this screen is streaming"
-            } else {
-                "Stream this screen's audio to the client"
-            })
-            .active(screen.audio)
-            .sensitive(!streaming)
-            .build();
-        {
-            let inner = inner.clone();
-            let id = screen.id.clone();
-            let switch_row = row.clone();
-            row.connect_active_notify(move |row| {
-                if inner.syncing.get() {
-                    return;
-                }
-                let enabled = row.is_active();
-                let Some(client) = inner.ctx.client() else {
-                    inner.ctx.toast("The Longcar daemon is unavailable");
-                    revert_screen_audio(&inner, &switch_row, &id);
-                    return;
-                };
-                let inner = inner.clone();
-                let switch_row = switch_row.clone();
-                let id = id.clone();
-                glib::spawn_future_local(async move {
-                    if let Err(err) = client.set_screen_audio(&id, enabled).await {
-                        inner.ctx.toast_err("Could not change audio routing", &err);
-                        revert_screen_audio(&inner, &switch_row, &id);
-                    }
-                });
-            });
-        }
-        inner.audio_list.append(&row);
-    }
-}
-
-fn revert_screen_audio(inner: &Rc<Inner>, row: &adw::SwitchRow, id: &str) {
-    let active = inner
-        .ctx
-        .state()
-        .and_then(|state| state.screens.into_iter().find(|screen| screen.id == id))
-        .map(|screen| screen.audio)
-        .unwrap_or(false);
-    inner.syncing.set(true);
-    row.set_active(active);
-    inner.syncing.set(false);
 }
 
 fn send_setting(ctx: &Ctx, payload: serde_json::Value, success: &str) {

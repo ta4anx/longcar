@@ -3,6 +3,6 @@
   "name": "Longcar",
   "description": "Control Longcar virtual displays and Sunshine streams from Quick Settings.",
   "shell-version": ["50"],
-  "version-name": "0.2.0",
+  "version-name": "0.3.0",
   "url": "https://github.com/ta4anx/longcar"
 }

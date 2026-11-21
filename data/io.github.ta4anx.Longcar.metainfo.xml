@@ -24,8 +24,12 @@
       <caption>Screens with per-device audio, touch, bitrate and position controls</caption>
     </screenshot>
     <screenshot>
+      <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/audio.png</image>
+      <caption>Audio page: host output, per-sink volume and per-screen routing</caption>
+    </screenshot>
+    <screenshot>
       <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/settings.png</image>
-      <caption>Per-device audio routing and behavior settings</caption>
+      <caption>Behavior settings, with Diagnostics built in</caption>
     </screenshot>
     <screenshot>
       <image>https://raw.githubusercontent.com/ta4anx/longcar/main/docs/screenshots/diagnostics.png</image>

@@ -90,6 +90,10 @@ struct ScreenRow {
     picture: gtk::Picture,
     audio: gtk::Switch,
     touch: gtk::Switch,
+    input: gtk::MenuButton,
+    keyboard: gtk::CheckButton,
+    mouse: gtk::CheckButton,
+    controller: gtk::CheckButton,
     bitrate: gtk::DropDown,
     bitrate_model: gtk::StringList,
     bitrate_values: Rc<RefCell<Vec<u32>>>,
@@ -351,6 +355,7 @@ impl ScreensPage {
             .tooltip_text(TOUCH_TOOLTIP)
             .build();
         touch.update_property(&[gtk::accessible::Property::Label(TOUCH_TOOLTIP)]);
+        let (input, keyboard, mouse, controller) = build_input_menu(screen);
         let bitrate_model =
             gtk::StringList::new(&BITRATES.iter().map(|(_, label)| *label).collect::<Vec<_>>());
         let bitrate = gtk::DropDown::builder()
@@ -371,6 +376,7 @@ impl ScreensPage {
         quick.set_valign(gtk::Align::Center);
         quick.append(&labeled_switch("Audio", &audio));
         quick.append(&labeled_switch("Touch", &touch));
+        quick.append(&input);
         quick.append(&bitrate);
         quick.append(&position);
 
@@ -450,6 +456,10 @@ impl ScreensPage {
             picture,
             audio,
             touch,
+            input,
+            keyboard,
+            mouse,
+            controller,
             bitrate,
             bitrate_model,
             bitrate_values,
@@ -460,6 +470,45 @@ impl ScreensPage {
         connect_quick_controls(&inner, &row, &screen.id);
         row
     }
+}
+
+fn build_input_menu(
+    screen: &ScreenEntry,
+) -> (
+    gtk::MenuButton,
+    gtk::CheckButton,
+    gtk::CheckButton,
+    gtk::CheckButton,
+) {
+    let button = gtk::MenuButton::builder()
+        .icon_name("input-keyboard-symbolic")
+        .tooltip_text("Keyboard, mouse and controller input")
+        .valign(gtk::Align::Center)
+        .build();
+    button.update_property(&[gtk::accessible::Property::Label(
+        "Keyboard, mouse and controller input",
+    )]);
+    let popover = gtk::Popover::new();
+    let menu = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    menu.set_margin_top(6);
+    menu.set_margin_bottom(6);
+    menu.set_margin_start(8);
+    menu.set_margin_end(8);
+    let keyboard = input_check("Keyboard", screen.keyboard);
+    let mouse = input_check("Mouse", screen.mouse);
+    let controller = input_check("Controller", screen.controller);
+    menu.append(&keyboard);
+    menu.append(&mouse);
+    menu.append(&controller);
+    popover.set_child(Some(&menu));
+    button.set_popover(Some(&popover));
+    (button, keyboard, mouse, controller)
+}
+
+fn input_check(label: &str, active: bool) -> gtk::CheckButton {
+    let check = gtk::CheckButton::with_label(label);
+    check.set_active(active);
+    check
 }
 
 fn labeled_switch(label: &str, switch: &gtk::Switch) -> gtk::Box {
@@ -614,6 +663,37 @@ fn connect_quick_controls(inner: &Rc<Inner>, row: &ScreenRow, id: &str) {
                 });
             });
     }
+    for (kind, check) in [
+        ("keyboard", &row.keyboard),
+        ("mouse", &row.mouse),
+        ("controller", &row.controller),
+    ] {
+        let inner = inner.clone();
+        let row = row.clone();
+        let id = id.to_string();
+        let kind = kind.to_string();
+        check.connect_toggled(move |check| {
+            if row.syncing.get() {
+                return;
+            }
+            let enabled = check.is_active();
+            let Some(client) = inner.ctx.client() else {
+                inner.ctx.toast("The Longcar daemon is unavailable");
+                resync_row(&inner, &row, &id);
+                return;
+            };
+            let inner = inner.clone();
+            let row = row.clone();
+            let id = id.clone();
+            let kind = kind.clone();
+            glib::spawn_future_local(async move {
+                if let Err(err) = client.set_screen_input(&id, &kind, enabled).await {
+                    inner.ctx.toast_err("Could not change input", &err);
+                    resync_row(&inner, &row, &id);
+                }
+            });
+        });
+    }
 }
 
 fn resync_row(inner: &Rc<Inner>, row: &ScreenRow, id: &str) {
@@ -641,6 +721,9 @@ fn update_row(row: &ScreenRow, screen: &ScreenEntry) {
     row.detail.set_label(&detail_text(screen));
     row.audio.set_active(screen.audio);
     row.touch.set_active(screen.touch);
+    row.keyboard.set_active(screen.keyboard);
+    row.mouse.set_active(screen.mouse);
+    row.controller.set_active(screen.controller);
     select_bitrate(row, screen.max_bitrate_kbps);
     row.position.set_selected(position_index(screen.position));
     row.syncing.set(false);
@@ -648,6 +731,10 @@ fn update_row(row: &ScreenRow, screen: &ScreenEntry) {
     let streaming = screen.state == ScreenState::Streaming;
     row.audio.set_sensitive(!streaming);
     row.touch.set_sensitive(!streaming);
+    row.keyboard.set_sensitive(!streaming);
+    row.mouse.set_sensitive(!streaming);
+    row.controller.set_sensitive(!streaming);
+    row.input.set_sensitive(!streaming);
     row.bitrate.set_sensitive(!streaming);
     let suffix = if streaming {
         " Unavailable while the screen is streaming."
@@ -722,6 +809,19 @@ fn summary(screen: &ScreenEntry) -> String {
     }
     if screen.touch {
         parts.push("touch".to_string());
+    }
+    let mut inputs = Vec::new();
+    if screen.keyboard {
+        inputs.push("kbd");
+    }
+    if screen.mouse {
+        inputs.push("mouse");
+    }
+    if screen.controller {
+        inputs.push("pad");
+    }
+    if !inputs.is_empty() {
+        parts.push(inputs.join("/"));
     }
     parts.join(" · ")
 }
@@ -913,6 +1013,10 @@ struct DialogInner {
     av1: gtk::DropDown,
     audio: adw::SwitchRow,
     touch: adw::SwitchRow,
+    keyboard: adw::SwitchRow,
+    mouse: adw::SwitchRow,
+    controller: adw::SwitchRow,
+    audio_sink: adw::EntryRow,
     bitrate: gtk::SpinButton,
     max_resolution: adw::EntryRow,
     cursor: gtk::DropDown,
@@ -938,6 +1042,14 @@ impl ScreenDialog {
         let av1: gtk::DropDown = builder.object("av1_dropdown").expect("av1");
         let audio: adw::SwitchRow = builder.object("audio_switch").expect("audio switch");
         let touch: adw::SwitchRow = builder.object("touch_switch").expect("touch switch");
+        let keyboard: adw::SwitchRow = builder.object("keyboard_switch").expect("keyboard switch");
+        let mouse: adw::SwitchRow = builder.object("mouse_switch").expect("mouse switch");
+        let controller: adw::SwitchRow = builder
+            .object("controller_switch")
+            .expect("controller switch");
+        let audio_sink: adw::EntryRow = builder
+            .object("audio_sink_entry")
+            .expect("audio sink entry");
         let bitrate: gtk::SpinButton = builder.object("bitrate_spin").expect("bitrate");
         let max_resolution: adw::EntryRow = builder
             .object("max_resolution_entry")
@@ -985,6 +1097,10 @@ impl ScreenDialog {
             av1,
             audio,
             touch,
+            keyboard,
+            mouse,
+            controller,
+            audio_sink,
             bitrate,
             max_resolution,
             cursor,
@@ -1084,6 +1200,10 @@ impl DialogInner {
                 self.bitrate.set_value(f64::from(screen.max_bitrate_kbps));
                 self.audio.set_active(screen.audio);
                 self.touch.set_active(screen.touch);
+                self.keyboard.set_active(screen.keyboard);
+                self.mouse.set_active(screen.mouse);
+                self.controller.set_active(screen.controller);
+                self.audio_sink.set_text(&screen.audio_sink);
                 self.max_resolution.set_text(&screen.max_resolution);
                 util::select_dropdown(
                     &self.position,
@@ -1138,6 +1258,10 @@ impl DialogInner {
                 self.bitrate.set_value(30000.0);
                 self.audio.set_active(true);
                 self.touch.set_active(true);
+                self.keyboard.set_active(true);
+                self.mouse.set_active(true);
+                self.controller.set_active(true);
+                self.audio_sink.set_text("");
                 self.max_resolution.set_text("");
                 let used: Vec<u8> = self
                     .ctx
@@ -1214,6 +1338,10 @@ impl DialogInner {
             cursor: parse_cursor(&self.cursor),
             audio: self.audio.is_active(),
             touch: self.touch.is_active(),
+            keyboard: self.keyboard.is_active(),
+            mouse: self.mouse.is_active(),
+            controller: self.controller.is_active(),
+            audio_sink: self.audio_sink.text().trim().to_string(),
         })
     }
 }
@@ -1433,6 +1561,10 @@ fn screen_json(screen: &ScreenConfig) -> serde_json::Value {
         "cursor": format!("{:?}", screen.cursor).to_lowercase(),
         "audio": screen.audio,
         "touch": screen.touch,
+        "keyboard": screen.keyboard,
+        "mouse": screen.mouse,
+        "controller": screen.controller,
+        "audio_sink": screen.audio_sink,
     })
 }
 
@@ -1503,7 +1635,7 @@ mod tests {
     }
 
     #[test]
-    fn screen_json_uses_the_daemon_camel_case_contract() {
+    fn screen_json_uses_the_daemon_contract() {
         let screen = ScreenConfig {
             id: "tablet".to_string(),
             name: "Tablet".to_string(),
@@ -1523,6 +1655,10 @@ mod tests {
             cursor: CursorMode::Embedded,
             audio: true,
             touch: false,
+            keyboard: true,
+            mouse: true,
+            controller: false,
+            audio_sink: String::new(),
         };
         let json = screen_json(&screen);
         assert_eq!(json["maxBitrateKbps"], 41000);
@@ -1530,6 +1666,9 @@ mod tests {
         assert_eq!(json["relativeTo"], "primary");
         assert_eq!(json["audio"], true);
         assert_eq!(json["touch"], false);
+        assert_eq!(json["keyboard"], true);
+        assert_eq!(json["controller"], false);
+        assert_eq!(json["audio_sink"], "");
         assert!(json.get("max_bitrate_kbps").is_none());
         assert!(json.get("refresh_hz").is_none());
     }

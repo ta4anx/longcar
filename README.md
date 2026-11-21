@@ -138,6 +138,8 @@ The Screens page carries the fast controls: audio, native touch, an **Input** me
 input and bitrate changes restart that screen's unit, so a live stream has to be stopped
 first; position changes apply live.
 
+<img src="docs/screenshots/audio.png" alt="Audio page: host output, sinks and per-screen routing">
+
 The Audio page is the detailed mixer: it lists every host sink with volume and mute state,
 lets you pin a screen's capture to a specific sink, warns when Sunshine's virtual sink is
 still the host default, and restores the host sink, volume and mute state when screens stop

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 pub mod activity;
+pub mod audio;
 pub mod devices;
 pub mod doctor;
 pub mod network;

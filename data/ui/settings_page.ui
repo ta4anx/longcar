@@ -45,7 +45,7 @@
     <child>
       <object class="AdwPreferencesGroup">
         <property name="title">Screens</property>
-        <property name="description">Default startup preset and the audio master switch</property>
+        <property name="description">Default startup preset and audio routing</property>
         <child>
           <object class="AdwActionRow" id="default_preset_row">
             <property name="title">Default preset</property>
@@ -53,20 +53,9 @@
           </object>
         </child>
         <child>
-          <object class="AdwSwitchRow" id="audio_master_switch">
-            <property name="title">Stream audio to clients</property>
-            <property name="subtitle">Turns audio on or off for every screen</property>
-          </object>
-        </child>
-      </object>
-    </child>
-    <child>
-      <object class="AdwPreferencesGroup">
-        <property name="title">Audio routing</property>
-        <property name="description">Choose which screens send their audio to the connected client</property>
-        <child>
-          <object class="GtkListBox" id="audio_screens_list">
-            <property name="selection-mode">none</property>
+          <object class="AdwActionRow" id="audio_row">
+            <property name="title">Audio</property>
+            <property name="subtitle">Host output, sinks, volume and per-screen audio routing</property>
           </object>
         </child>
       </object>

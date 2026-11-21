@@ -12,6 +12,7 @@ use serde_json::json;
 
 use crate::client::{Client, Ctx, DaemonWatcher};
 use crate::pages::activity::ActivityPage;
+use crate::pages::audio::AudioPage;
 use crate::pages::devices::DevicesPage;
 use crate::pages::network::NetworkPage;
 use crate::pages::presets::PresetsPage;
@@ -19,8 +20,8 @@ use crate::pages::screens::ScreensPage;
 use crate::pages::settings::SettingsPage;
 use crate::util;
 
-const PAGES: [&str; 6] = [
-    "screens", "presets", "devices", "network", "activity", "settings",
+const PAGES: [&str; 7] = [
+    "screens", "presets", "devices", "audio", "network", "activity", "settings",
 ];
 
 thread_local! {
@@ -39,6 +40,7 @@ pub struct AppWindow {
     screens: Rc<ScreensPage>,
     presets: Rc<PresetsPage>,
     devices: Rc<DevicesPage>,
+    audio: Rc<AudioPage>,
     network: Rc<NetworkPage>,
     activity: Rc<ActivityPage>,
     settings: Rc<SettingsPage>,
@@ -115,6 +117,19 @@ impl AppWindow {
         unavailable_error.set_xalign(0.0);
         unavailable_error.add_css_class("dim-label");
 
+        let select_page: Rc<dyn Fn(&str)> = {
+            let sidebar = sidebar.clone();
+            let stack = stack.clone();
+            Rc::new(move |name: &str| {
+                if let Some(index) = PAGES.iter().position(|page| *page == name) {
+                    if let Some(row) = sidebar.row_at_index(index as i32) {
+                        sidebar.select_row(Some(&row));
+                    }
+                    stack.set_visible_child_name(name);
+                }
+            })
+        };
+
         let ctx = Ctx {
             window: window.clone(),
             toast_overlay: toast_overlay.clone(),
@@ -125,11 +140,13 @@ impl AppWindow {
                 let client_slot = client_slot.clone();
                 Rc::new(move || show_logs(&window, &client_slot))
             },
+            select_page,
         };
 
         let screens = ScreensPage::new(ctx.clone());
         let presets = PresetsPage::new(ctx.clone());
         let devices = DevicesPage::new(ctx.clone());
+        let audio = AudioPage::new(ctx.clone());
         let network = NetworkPage::new(ctx.clone());
         let activity = ActivityPage::new(ctx.clone());
         let settings = SettingsPage::new(ctx.clone());
@@ -137,6 +154,7 @@ impl AppWindow {
         stack.add_named(screens.root(), Some("screens"));
         stack.add_named(presets.root(), Some("presets"));
         stack.add_named(devices.root(), Some("devices"));
+        stack.add_named(audio.root(), Some("audio"));
         stack.add_named(network.root(), Some("network"));
         stack.add_named(activity.root(), Some("activity"));
         stack.add_named(settings.root(), Some("settings"));
@@ -163,6 +181,7 @@ impl AppWindow {
             let screens = screens.clone();
             let devices = devices.clone();
             let activity = activity.clone();
+            let audio = audio.clone();
             let last_page = last_page.clone();
             stack.connect_visible_child_name_notify(move |stack| {
                 let name = stack
@@ -172,6 +191,7 @@ impl AppWindow {
                 screens.set_active(name == "screens");
                 devices.set_active(name == "devices");
                 activity.set_active(name == "activity");
+                audio.set_active(name == "audio");
                 if !name.is_empty() && name != "unavailable" {
                     *last_page.borrow_mut() = name;
                 }
@@ -190,6 +210,7 @@ impl AppWindow {
             screens,
             presets,
             devices,
+            audio,
             network,
             activity,
             settings,
@@ -367,6 +388,9 @@ impl AppWindow {
         window.network.update(&doc);
         window.activity.update(&doc);
         window.settings.update(&doc);
+        if window.audio.is_active() {
+            window.audio.refresh();
+        }
 
         if !doc.settings.onboarding_complete
             && !window.onboarding_shown.get()
@@ -618,9 +642,13 @@ pub fn capture_pages(dir: String) {
                 window.sidebar.select_row(Some(&row));
             }
             glib::timeout_future(std::time::Duration::from_millis(450)).await;
-            window.window.queue_draw();
-            glib::timeout_future(std::time::Duration::from_millis(250)).await;
-            save_shot(&window.window, &dir, name);
+            for _ in 0..4 {
+                window.window.queue_draw();
+                glib::timeout_future(std::time::Duration::from_millis(250)).await;
+                if save_shot(&window.window, &dir, name) {
+                    break;
+                }
+            }
         }
 
         // The Settings page is taller than the window; capture its diagnostics
@@ -639,9 +667,13 @@ pub fn capture_pages(dir: String) {
                 adjustment.set_value((f64::from(bounds.y()) - 8.0).clamp(0.0, max));
             }
             glib::timeout_future(std::time::Duration::from_millis(450)).await;
-            window.window.queue_draw();
-            glib::timeout_future(std::time::Duration::from_millis(250)).await;
-            save_shot(&window.window, &dir, "settings-diagnostics");
+            for _ in 0..4 {
+                window.window.queue_draw();
+                glib::timeout_future(std::time::Duration::from_millis(250)).await;
+                if save_shot(&window.window, &dir, "settings-diagnostics") {
+                    break;
+                }
+            }
         }
 
         if let Some(app) = window.window.application() {
@@ -650,7 +682,7 @@ pub fn capture_pages(dir: String) {
     });
 }
 
-fn save_shot(window: &adw::ApplicationWindow, dir: &str, name: &str) {
+fn save_shot(window: &adw::ApplicationWindow, dir: &str, name: &str) -> bool {
     let width = f64::from(window.width());
     let height = f64::from(window.height());
     let paintable = gtk::WidgetPaintable::new(Some(window));
@@ -658,17 +690,23 @@ fn save_shot(window: &adw::ApplicationWindow, dir: &str, name: &str) {
     paintable.snapshot(&snapshot, width, height);
     let Some(node) = snapshot.to_node() else {
         eprintln!("shot: no render node for {name}");
-        return;
+        return false;
     };
     let Some(renderer) = window.renderer() else {
         eprintln!("shot: no renderer for {name}");
-        return;
+        return false;
     };
     let texture = renderer.render_texture(&node, None);
     let path = std::path::Path::new(dir).join(format!("longcar-{name}.png"));
     match texture.save_to_png(&path) {
-        Ok(()) => println!("shot: {}", path.display()),
-        Err(err) => eprintln!("shot: cannot save {}: {err}", path.display()),
+        Ok(()) => {
+            println!("shot: {}", path.display());
+            true
+        }
+        Err(err) => {
+            eprintln!("shot: cannot save {}: {err}", path.display());
+            false
+        }
     }
 }
 

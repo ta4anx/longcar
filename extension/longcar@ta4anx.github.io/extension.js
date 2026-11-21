@@ -73,6 +73,11 @@ export default class LongcarExtension extends Extension {
         this._menuItems = [];
         this._signature = null;
         this._state = null;
+        this._screens = [];
+        this._presets = [];
+        this._warnings = [];
+        this._staleDefault = false;
+        this._audioInfoPending = false;
         this._active = 0;
         this._live = 0;
 
@@ -88,8 +93,11 @@ export default class LongcarExtension extends Extension {
             this._onToggleDestroyed.bind(this));
         this._openStateId = this._toggle.menu.connect('open-state-changed',
             (menu, isOpen) => {
-                if (isOpen)
-                    this._refresh();
+                if (!isOpen)
+                    return;
+
+                this._refresh();
+                this._refreshAudioInfo();
             });
 
         this._setAvailable(false);
@@ -138,6 +146,11 @@ export default class LongcarExtension extends Extension {
         this._indicator = null;
         this._toggle = null;
         this._state = null;
+        this._screens = [];
+        this._presets = [];
+        this._warnings = [];
+        this._staleDefault = false;
+        this._audioInfoPending = false;
         this._signature = null;
         this._menuItems = [];
         this._available = false;
@@ -159,6 +172,11 @@ export default class LongcarExtension extends Extension {
         this._toggle = null;
         this._available = false;
         this._state = null;
+        this._screens = [];
+        this._presets = [];
+        this._warnings = [];
+        this._staleDefault = false;
+        this._audioInfoPending = false;
         this._signature = null;
         this._menuItems = [];
     }
@@ -219,6 +237,11 @@ export default class LongcarExtension extends Extension {
             }
             this._toggle.subtitle = 'Daemon unavailable';
             this._state = null;
+            this._screens = [];
+            this._presets = [];
+            this._warnings = [];
+            this._staleDefault = false;
+            this._audioInfoPending = false;
             this._signature = null;
             this._clearMenuItems();
         }
@@ -283,6 +306,10 @@ export default class LongcarExtension extends Extension {
         const presets = Array.isArray(state.presets) ? state.presets : [];
         const warnings = Array.isArray(state.warnings) ? state.warnings : [];
 
+        this._screens = screens;
+        this._presets = presets;
+        this._warnings = warnings;
+
         const active = screens.filter(screen =>
             ACTIVE_STATES.has(screen.state)).length;
         const live = screens.filter(screen => screen.state === 'streaming').length;
@@ -302,7 +329,20 @@ export default class LongcarExtension extends Extension {
 
         this._toggle.subtitle = `${active} active · ${live} live`;
 
-        const signature = JSON.stringify({
+        const signature = this._signatureFor(screens, presets, warnings);
+
+        const isOpen = this._toggle.menu.isOpen;
+        if (isOpen || signature !== this._signature) {
+            this._signature = signature;
+            this._rebuildMenu(screens, presets, warnings);
+        }
+
+        if (isOpen)
+            this._refreshAudioInfo();
+    }
+
+    _signatureFor(screens, presets, warnings) {
+        return JSON.stringify({
             screens: screens.map(screen => [
                 screen.id,
                 screen.name,
@@ -310,19 +350,57 @@ export default class LongcarExtension extends Extension {
                 screen.maxBitrateKbps ?? 0,
                 Boolean(screen.audio),
                 Boolean(screen.touch),
+                Boolean(screen.keyboard),
+                Boolean(screen.mouse),
+                Boolean(screen.controller),
                 screen.position ?? '',
                 screen.relativeTo ?? '',
                 screen.alignment ?? '',
             ]),
             presets: presets.map(preset => [preset.id, preset.name, preset.screens]),
             warnings,
+            staleDefault: this._staleDefault,
         });
+    }
 
-        const isOpen = this._toggle.menu.isOpen;
-        if (isOpen || signature !== this._signature) {
-            this._signature = signature;
-            this._rebuildMenu(screens, presets, warnings);
-        }
+    _refreshAudioInfo() {
+        if (this._audioInfoPending || !this._available)
+            return;
+
+        this._audioInfoPending = true;
+        this._call('GetAudioInfo', null, (error, json) => {
+            this._audioInfoPending = false;
+
+            if (error) {
+                this._setStaleDefault(false);
+                return;
+            }
+
+            let info;
+            try {
+                info = JSON.parse(json);
+            } catch (parseError) {
+                console.error(`Longcar: malformed audio JSON: ${parseError}`);
+                this._setStaleDefault(false);
+                return;
+            }
+
+            this._setStaleDefault(Boolean(info?.staleDefault));
+        });
+    }
+
+    _setStaleDefault(stale) {
+        if (this._staleDefault === stale)
+            return;
+
+        this._staleDefault = stale;
+
+        if (!this._state || !this._toggle?.menu.isOpen)
+            return;
+
+        this._signature =
+            this._signatureFor(this._screens, this._presets, this._warnings);
+        this._rebuildMenu(this._screens, this._presets, this._warnings);
     }
 
     _rebuildMenu(screens, presets, warnings) {
@@ -372,6 +450,13 @@ export default class LongcarExtension extends Extension {
             this._menuItems.push(restore);
         }
 
+        if (this._staleDefault) {
+            const restoreAudio = new PopupMenu.PopupMenuItem('Restore host audio');
+            restoreAudio.connect('activate', () => this._onRestoreHostAudio());
+            menu.addMenuItem(restoreAudio);
+            this._menuItems.push(restoreAudio);
+        }
+
         const separator = new PopupMenu.PopupSeparatorMenuItem();
         menu.addMenuItem(separator);
         this._menuItems.push(separator);
@@ -408,11 +493,23 @@ export default class LongcarExtension extends Extension {
         const width = screen.width ?? 0;
         const height = screen.height ?? 0;
         const rate = bitrate > 0 ? `${bitrate / 1000} Mbps` : 'no cap';
-        const audio = screen.audio ? 'audio' : 'audio off';
-        const touch = screen.touch ? 'touch' : 'touch off';
 
-        const mode = new PopupMenu.PopupMenuItem(
-            `${width}×${height} · ${rate} · ${audio} · ${touch}`,
+        const modeParts = [`${width}×${height}`, rate];
+        if (screen.audio)
+            modeParts.push('audio');
+        if (screen.touch)
+            modeParts.push('touch');
+
+        const inputs = [];
+        if (screen.keyboard)
+            inputs.push('kbd');
+        if (screen.mouse)
+            inputs.push('mouse');
+        if (screen.controller)
+            inputs.push('pad');
+        modeParts.push(inputs.length > 0 ? inputs.join('/') : 'no input');
+
+        const mode = new PopupMenu.PopupMenuItem(modeParts.join(' · '),
             {reactive: false, can_focus: false, activate: false});
         mode.setSensitive(false);
         item.menu.addMenuItem(mode);
@@ -468,6 +565,21 @@ export default class LongcarExtension extends Extension {
             () => this._onToggleTouch(screenId, !screen.touch));
         item.menu.addMenuItem(touchItem);
 
+        const inputMenu = new PopupMenu.PopupSubMenuMenuItem('Input', false);
+        const inputOptions = [
+            ['keyboard', 'Keyboard', Boolean(screen.keyboard)],
+            ['mouse', 'Mouse', Boolean(screen.mouse)],
+            ['controller', 'Controller', Boolean(screen.controller)],
+        ];
+        for (const [kind, text, checked] of inputOptions) {
+            const option = new PopupMenu.PopupMenuItem(
+                `${checked ? CHECKED : UNCHECKED}${text}`);
+            option.connect('activate',
+                () => this._onSetInput(screenId, kind, !checked));
+            inputMenu.menu.addMenuItem(option);
+        }
+        item.menu.addMenuItem(inputMenu);
+
         return item;
     }
 
@@ -512,6 +624,28 @@ export default class LongcarExtension extends Extension {
         console.debug(`longcar: set touch ${enabled}`);
         this._activateItem('SetScreenTouch',
             new GLib.Variant('(sb)', [screenId, enabled]));
+    }
+
+    _onSetInput(screenId, kind, enabled) {
+        console.debug(`longcar: set input ${kind} ${enabled}`);
+        this._activateItem('SetScreenInput',
+            new GLib.Variant('(ssb)', [screenId, kind, enabled]));
+    }
+
+    _onRestoreHostAudio() {
+        console.debug('longcar: restore host audio');
+        this._closeMenu();
+        this._call('RestoreHostAudio', null, error => {
+            if (error) {
+                Main.notify('Longcar', error.message ?? String(error));
+                this._refresh();
+                return;
+            }
+
+            this._staleDefault = false;
+            this._refreshAudioInfo();
+            this._refresh();
+        });
     }
 
     _clearMenuItems() {

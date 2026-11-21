@@ -32,7 +32,6 @@ pub trait DaemonControl {
     fn add_quick_screen(&self, kind: &str) -> zbus::Result<String>;
     fn update_settings(&self, json: &str) -> zbus::Result<()>;
     fn set_presets(&self, json: &str) -> zbus::Result<()>;
-    fn set_audio_screen(&self, id: &str) -> zbus::Result<()>;
     fn set_screen_audio(&self, screen_id: &str, enabled: bool) -> zbus::Result<()>;
     fn set_screen_touch(&self, screen_id: &str, enabled: bool) -> zbus::Result<()>;
     fn set_screen_bitrate(&self, screen_id: &str, kbps: u32) -> zbus::Result<()>;
@@ -43,6 +42,12 @@ pub trait DaemonControl {
         relative_to: &str,
         alignment: &str,
     ) -> zbus::Result<()>;
+    fn set_screen_input(&self, screen_id: &str, kind: &str, enabled: bool) -> zbus::Result<()>;
+    fn set_screen_audio_sink(&self, screen_id: &str, sink: &str) -> zbus::Result<()>;
+    fn get_audio_info(&self) -> zbus::Result<String>;
+    fn set_sink_volume(&self, sink_id: u32, percent: u8) -> zbus::Result<()>;
+    fn set_sink_muted(&self, sink_id: u32, muted: bool) -> zbus::Result<()>;
+    fn restore_host_audio(&self) -> zbus::Result<()>;
     fn list_pairings(&self, screen_id: &str) -> zbus::Result<String>;
     fn pair(&self, screen_id: &str, pairing_id: &str, pin: &str, name: &str) -> zbus::Result<bool>;
     fn cancel_pairing(&self, screen_id: &str, pairing_id: &str) -> zbus::Result<()>;
@@ -132,9 +137,6 @@ impl Client {
     pub async fn set_presets(&self, json: &str) -> Result<(), String> {
         self.proxy.set_presets(json).await.map_err(err_str)
     }
-    pub async fn set_audio_screen(&self, id: &str) -> Result<(), String> {
-        self.proxy.set_audio_screen(id).await.map_err(err_str)
-    }
     pub async fn set_screen_audio(&self, id: &str, enabled: bool) -> Result<(), String> {
         self.proxy
             .set_screen_audio(id, enabled)
@@ -164,6 +166,38 @@ impl Client {
             .set_screen_layout(id, position, relative_to, alignment)
             .await
             .map_err(err_str)
+    }
+    pub async fn set_screen_input(
+        &self,
+        id: &str,
+        kind: &str,
+        enabled: bool,
+    ) -> Result<(), String> {
+        self.proxy
+            .set_screen_input(id, kind, enabled)
+            .await
+            .map_err(err_str)
+    }
+    pub async fn set_screen_audio_sink(&self, id: &str, sink: &str) -> Result<(), String> {
+        self.proxy
+            .set_screen_audio_sink(id, sink)
+            .await
+            .map_err(err_str)
+    }
+    pub async fn get_audio_info(&self) -> Result<String, String> {
+        self.proxy.get_audio_info().await.map_err(err_str)
+    }
+    pub async fn set_sink_volume(&self, id: u32, percent: u8) -> Result<(), String> {
+        self.proxy
+            .set_sink_volume(id, percent)
+            .await
+            .map_err(err_str)
+    }
+    pub async fn set_sink_muted(&self, id: u32, muted: bool) -> Result<(), String> {
+        self.proxy.set_sink_muted(id, muted).await.map_err(err_str)
+    }
+    pub async fn restore_host_audio(&self) -> Result<(), String> {
+        self.proxy.restore_host_audio().await.map_err(err_str)
     }
     pub async fn list_pairings(&self, screen_id: &str) -> Result<String, String> {
         self.proxy.list_pairings(screen_id).await.map_err(err_str)
@@ -237,6 +271,7 @@ pub struct Ctx {
     pub client: Rc<RefCell<Option<Client>>>,
     pub state: Rc<RefCell<Option<StateDoc>>>,
     pub open_logs: Rc<dyn Fn()>,
+    pub select_page: Rc<dyn Fn(&str)>,
 }
 
 impl Ctx {
