@@ -6,6 +6,7 @@
 //! application per screen and stopping one screen cannot affect another.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Environment inherited from the daemon's own session.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -146,11 +147,45 @@ pub async fn start(spec: &UnitSpec) -> Result<String, String> {
     Ok(unit_name(&spec.screen_id))
 }
 
-/// Stop a unit and clear its failed state. Tolerates units that already exited.
+/// `systemctl --user stop --no-block <unit>`: ask systemd to stop without blocking the
+/// caller.
+pub fn stop_args(unit: &str) -> Vec<String> {
+    vec![
+        "--user".to_string(),
+        "stop".to_string(),
+        "--no-block".to_string(),
+        unit.to_string(),
+    ]
+}
+
+/// Grace period before escalating a stuck stop to SIGKILL.
+const STOP_GRACE: Duration = Duration::from_secs(5);
+
+/// Stop a unit and clear its failed state.
+///
+/// Sunshine can be blocked inside a portal request and ignore SIGTERM, which would make
+/// `systemctl stop` hang for systemd's 90 s stop timeout while the orchestrator waits.
+/// So the stop is issued without blocking, polled for a bounded time, then SIGKILLed.
 pub async fn stop(unit: &str) -> Result<(), String> {
     let mut cmd = tokio::process::Command::new("systemctl");
-    cmd.args(&systemctl_args(unit, "stop")[1..]);
+    cmd.args(stop_args(unit));
     let _ = run_quiet(cmd).await;
+
+    let deadline = tokio::time::Instant::now() + STOP_GRACE;
+    loop {
+        let state = unit_state(unit).await;
+        if state.is_empty() || state == "inactive" || state == "failed" {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            let mut kill = tokio::process::Command::new("systemctl");
+            kill.args(["--user", "kill", "-s", "KILL", unit]);
+            let _ = run_quiet(kill).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     reset_failed(unit).await?;
     Ok(())
 }
@@ -309,6 +344,22 @@ mod tests {
             name.trim_start_matches(UNIT_PREFIX)
                 .chars()
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        );
+    }
+
+    #[test]
+    fn stop_does_not_block_the_caller() {
+        assert_eq!(
+            stop_args("longcar-sunshine-tablet.service"),
+            [
+                "--user",
+                "stop",
+                "--no-block",
+                "longcar-sunshine-tablet.service"
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
         );
     }
 
