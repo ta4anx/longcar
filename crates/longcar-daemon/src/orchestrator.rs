@@ -387,10 +387,6 @@ impl Orchestrator {
                 ));
             }
         };
-        eprintln!(
-            "longcar-daemon: doctor: collected {} checks",
-            report.checks.len()
-        );
         Ok(report.to_json())
     }
 
