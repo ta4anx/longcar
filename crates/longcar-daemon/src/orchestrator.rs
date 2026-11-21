@@ -107,6 +107,8 @@ pub enum Command {
         reply: Reply,
     },
     GetAudioInfo(JsonReply),
+    StartSpeedTest(JsonReply),
+    StopSpeedTest(Reply),
     RestoreHostAudio(Reply),
     ExportConfig(JsonReply),
     ImportConfig(String, Reply),
@@ -471,6 +473,18 @@ impl Orchestrator {
             .await
     }
 
+    /// Start the LAN throughput test and return its status JSON (with the URL).
+    pub async fn start_speed_test(&self) -> Result<String, DaemonError> {
+        let (tx, rx) = oneshot::channel();
+        self.send_command(Command::StartSpeedTest(tx)).await?;
+        rx.await
+            .map_err(|_| DaemonError::Unavailable("daemon stopped responding".to_string()))?
+    }
+
+    pub async fn stop_speed_test(&self) -> Result<(), DaemonError> {
+        self.call(Command::StopSpeedTest).await
+    }
+
     /// Put the host back on a physical sink when Sunshine left its virtual one default.
     pub async fn restore_host_audio(&self) -> Result<(), DaemonError> {
         self.call(Command::RestoreHostAudio).await
@@ -727,6 +741,7 @@ enum ActorEvent {
     Replanned {
         rects: Vec<(String, Rect)>,
     },
+    SpeedTest(crate::speedtest::SpeedTestEvent),
     MonitorsChanged,
     Pairs {
         screen: String,
@@ -780,6 +795,9 @@ struct Actor {
     session_started: HashMap<String, String>,
     /// Host output captured before the first screen started.
     host_sink_before: Option<longcar_core::audio::HostAudioSnapshot>,
+    /// LAN throughput test currently listening, if any.
+    speed_test: Option<crate::speedtest::SpeedTestServer>,
+    speed_status: longcar_core::state::SpeedTestStatus,
 }
 
 impl Actor {
@@ -838,6 +856,8 @@ impl Actor {
             last_connector_poll: now,
             session_started: HashMap::new(),
             host_sink_before: None,
+            speed_test: None,
+            speed_status: longcar_core::state::SpeedTestStatus::default(),
         }
     }
 
@@ -1117,6 +1137,14 @@ impl Actor {
             Command::SetSinkMuted { id, muted, reply } => {
                 let result = longcar_core::audio::set_muted(id, muted)
                     .map_err(|e| DaemonError::Io(e.to_string()));
+                let _ = reply.send(result);
+            }
+            Command::StartSpeedTest(reply) => {
+                let result = self.start_speed_test_command().await;
+                let _ = reply.send(result);
+            }
+            Command::StopSpeedTest(reply) => {
+                let result = self.stop_speed_test_command();
                 let _ = reply.send(result);
             }
             Command::GetAudioInfo(reply) => {
@@ -1908,6 +1936,51 @@ impl Actor {
         }
     }
 
+    /// Bind the throughput listener on the preferred LAN address.
+    async fn start_speed_test_command(&mut self) -> Result<String, DaemonError> {
+        if let Some(server) = self.speed_test.take() {
+            server.stop();
+        }
+        let host = longcar_core::network::host_addresses()
+            .into_iter()
+            .find(|address| address.preferred)
+            .map(|address| address.address)
+            .ok_or_else(|| {
+                DaemonError::Unavailable("no LAN address to serve the test on".to_string())
+            })?;
+        let (tx, mut rx) = mpsc::channel(16);
+        let forward = self.evt_tx.clone();
+        tokio::spawn(async move {
+            while let Some(event) = rx.recv().await {
+                if forward.send(ActorEvent::SpeedTest(event)).await.is_err() {
+                    return;
+                }
+            }
+        });
+        let server = crate::speedtest::SpeedTestServer::start(&host, tx)
+            .await
+            .map_err(DaemonError::Io)?;
+        self.speed_status = server.status.clone();
+        self.speed_test = Some(server);
+        self.logs
+            .daemon_line(format!("speed test listening on {}", self.speed_status.url));
+        self.publish(false);
+        Ok(serde_json::to_string(&self.speed_status).unwrap_or_else(|_| "{}".to_string()))
+    }
+
+    fn stop_speed_test_command(&mut self) -> Result<(), DaemonError> {
+        let Some(server) = self.speed_test.take() else {
+            return Err(DaemonError::Conflict(
+                "no speed test is running".to_string(),
+            ));
+        };
+        server.stop();
+        self.speed_status.running = false;
+        self.speed_status.url.clear();
+        self.publish(false);
+        Ok(())
+    }
+
     fn import_config_command(&mut self, toml_text: &str) -> Result<(), DaemonError> {
         // Refuse while anything is being prepared as well: a start that is still creating
         // its output would otherwise install a runtime from the old configuration.
@@ -2378,6 +2451,10 @@ impl Actor {
                     self.publish(false);
                 }
             }
+            ActorEvent::SpeedTest(event) => {
+                self.handle_speed_test_event(event);
+                self.publish(false);
+            }
             ActorEvent::Replanned { rects } => {
                 for (screen, rect) in rects {
                     if let Some(runtime) = self.runtimes.get_mut(&screen) {
@@ -2455,6 +2532,10 @@ fn stage_error_for(err: DaemonError) -> StageError {
         DaemonError::Io(_) => Stage::Io,
     };
     StageError::new(stage, err.message())
+}
+
+fn round1(value: f64) -> f64 {
+    (value * 10.0).round() / 10.0
 }
 
 fn now_rfc3339() -> String {
@@ -3048,6 +3129,58 @@ impl Actor {
         }
     }
 
+    fn handle_speed_test_event(&mut self, event: crate::speedtest::SpeedTestEvent) {
+        use crate::speedtest::SpeedTestEvent as E;
+        match event {
+            E::Download { mbps, client } => {
+                self.logs
+                    .daemon_line(format!("speed test download {mbps:.1} Mbps from {client}"));
+                self.speed_status.download_mbps = Some(round1(mbps));
+                self.speed_status.client = Some(client);
+            }
+            E::Upload { mbps } => {
+                self.speed_status.upload_mbps = Some(round1(mbps));
+            }
+            E::Reported {
+                download_mbps,
+                upload_mbps,
+                client,
+            } => {
+                self.speed_status.download_mbps = Some(round1(download_mbps));
+                self.speed_status.upload_mbps = Some(round1(upload_mbps));
+                self.speed_status.measured_at = Some(now_rfc3339());
+                self.speed_status.client = Some(client);
+                self.speed_status.running = false;
+                self.speed_status.url.clear();
+                self.speed_status.expires_at = None;
+                if let Some(server) = self.speed_test.take() {
+                    server.stop();
+                }
+                self.notify(
+                    "speedtest",
+                    "Speed test finished",
+                    &format!(
+                        "{:.1} Mbps down / {:.1} Mbps up",
+                        download_mbps, upload_mbps
+                    ),
+                );
+            }
+            E::Closed => {
+                self.speed_status.running = false;
+                self.speed_status.url.clear();
+                self.speed_status.expires_at = None;
+                self.speed_test = None;
+            }
+            E::Failed(message) => {
+                self.logs.daemon_line(format!("speed test: {message}"));
+                self.speed_status.error = Some(message);
+                self.speed_status.running = false;
+                self.speed_status.url.clear();
+                self.speed_test = None;
+            }
+        }
+    }
+
     fn publish(&mut self, stats_only: bool) {
         let mut states = Vec::new();
         let mut screens = Vec::new();
@@ -3094,6 +3227,7 @@ impl Actor {
             pending_pairings: self.pending_pairings.clone(),
             devices: self.devices.clone(),
             host: self.host.clone(),
+            speed_test: self.speed_status.clone(),
             warnings: plan::warnings_vec(&self.warnings),
         };
         self.state_doc = doc.clone();

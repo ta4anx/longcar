@@ -234,8 +234,15 @@ pub fn settings_entry(config: &Config) -> SettingsEntry {
 
 /// Host addresses as published in the state document.
 pub fn host_entry() -> HostEntry {
+    let addresses = longcar_core::network::host_addresses();
+    // The Wi-Fi link of the preferred address is what a speed test will go through.
+    let wifi = addresses
+        .iter()
+        .find(|address| address.preferred)
+        .and_then(|address| longcar_core::network::wifi_link(&address.interface));
     HostEntry {
-        addresses: longcar_core::network::host_addresses()
+        wifi,
+        addresses: addresses
             .into_iter()
             .map(|address| HostAddressEntry {
                 interface: address.interface,

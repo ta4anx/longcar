@@ -49,6 +49,7 @@ display.
 | 📱 **Audio page** | Per-device routing, host sink choice, volume/mute per sink, and a guard that restores your speakers after a killed stream |
 | 👆 **Input per device** | Touchscreen vs pointer, and keyboard / mouse / controller switches per screen |
 | ⚡ **Quick bitrate/layout** | 4–30 Mbps presets and position changes from the app rows *and* the Quick Settings menu |
+| 📶 **Network page** | Host Wi-Fi link (SSID, signal, negotiated rates, channel) and a real end-to-end throughput test you open on the tablet — no app install needed |
 | 🔌 **Pairing** | PIN approval and client management (enable/disable/unpair) from the app or `longcarctl` |
 | 🩺 **Doctor** | 14 checks (session, Mutter, portal, Sunshine, GStreamer, ports, uinput, extension…) with one-click fixes, now inside Settings |
 | 📈 **Activity** | Bitrate sparkline, fps, codec, duration and session history |
@@ -152,7 +153,8 @@ longcarctl status [--json]          longcarctl start [--preset ID] [--screen ID]
 longcarctl stop [--screen ID]       longcarctl screens list|add|update|remove
 longcarctl presets list|start ID    longcarctl devices pending|list|pair|unpair|enable|disable
 longcarctl doctor [--json] [--self-test]   longcarctl fix FIX_ID
-longcarctl network hosts|ports      longcarctl logs -n 200
+longcarctl network hosts|ports|link   longcarctl network speedtest [--stop|--status]
+longcarctl logs -n 200
 longcarctl audio [off|SCREEN] [--restore-host]   longcarctl audio   # sink overview
 longcarctl screens bitrate ID KBPS | position ID left|right|above|below
 longcarctl screens audio|touch ID on|off | input ID keyboard|mouse|controller on|off
@@ -188,13 +190,18 @@ Bug reports with `longcarctl doctor --json` go a long way. See
 - GNOME shares one input seat: every stream controls the same pointer/keyboard.
 - No HDR. HEVC/AV1 Main10 is a codec advertisement, not an HDR guarantee.
 - Idle Moonlight clients do not advertise over mDNS.
+- The throughput test is TCP and lives for 120 s; with `ufw` enabled, allow the printed port
+  for that minute. It measures the link, not the stream — a good number with stutter points
+  at airtime or UDP loss.
 - Validated on AMD (renoir) with the software encoder; NVIDIA/Intel are untested, and
   VAAPI needs a DRM render node (`/dev/dri/renderD*`).
 - The requested scale is clamped to the closest scale Mutter offers.
 
 ## Security
 
-Longcar listens on your LAN only; the daemon has no network listener (session D-Bus only).
+Longcar listens on your LAN only. The daemon has no persistent network listener: the only
+socket is the on-demand speed test (random token URL, three fixed routes, fixed payload, no
+filesystem access, closes after the report or 120 s).
 
 - Do not forward Sunshine ports from the internet. Paired clients get keyboard and mouse
   control of your desktop.

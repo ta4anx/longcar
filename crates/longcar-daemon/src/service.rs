@@ -322,6 +322,22 @@ impl Daemon {
             .map_err(Into::into)
     }
 
+    #[zbus(name = "StartSpeedTest")]
+    async fn start_speed_test(&self) -> Result<String, ServiceError> {
+        self.orchestrator
+            .start_speed_test()
+            .await
+            .map_err(Into::into)
+    }
+
+    #[zbus(name = "StopSpeedTest")]
+    async fn stop_speed_test(&self) -> Result<(), ServiceError> {
+        self.orchestrator
+            .stop_speed_test()
+            .await
+            .map_err(Into::into)
+    }
+
     #[zbus(name = "RestoreHostAudio")]
     async fn restore_host_audio(&self) -> Result<(), ServiceError> {
         self.orchestrator

@@ -60,6 +60,8 @@ trait Daemon {
     fn set_screen_input(&self, screen_id: &str, kind: &str, enabled: bool) -> zbus::Result<()>;
     fn set_screen_audio_sink(&self, screen_id: &str, sink: &str) -> zbus::Result<()>;
     fn get_audio_info(&self) -> zbus::Result<String>;
+    fn start_speed_test(&self) -> zbus::Result<String>;
+    fn stop_speed_test(&self) -> zbus::Result<()>;
     fn restore_host_audio(&self) -> zbus::Result<()>;
     fn export_config(&self) -> zbus::Result<String>;
     fn import_config(&self, toml: &str) -> zbus::Result<()>;
@@ -362,6 +364,16 @@ enum NetworkCommand {
         screen: Option<String>,
         #[arg(long)]
         cidr: Option<String>,
+    },
+    /// Show the host Wi-Fi link (SSID, signal, negotiated rates).
+    Link,
+    /// Measure LAN throughput with a device: prints a URL to open on it, or shows the
+    /// last result with `--status`, or stops the listener with `--stop`.
+    Speedtest {
+        #[arg(long)]
+        stop: bool,
+        #[arg(long)]
+        status: bool,
     },
 }
 
@@ -1136,7 +1148,102 @@ async fn network(command: NetworkCommand) -> CliResult<()> {
     match command {
         NetworkCommand::Hosts => network_hosts().await,
         NetworkCommand::Ports { screen, cidr } => network_ports(screen, cidr).await,
+        NetworkCommand::Link => network_link().await,
+        NetworkCommand::Speedtest { stop, status } => network_speedtest(stop, status).await,
     }
+}
+
+async fn network_link() -> CliResult<()> {
+    let proxy = connect().await?;
+    let state = fetch_state(&proxy).await?;
+    match state.host.wifi.as_ref() {
+        Some(link) => {
+            println!("interface: {}", link.interface);
+            println!(
+                "ssid:      {}",
+                if link.ssid.is_empty() {
+                    "?"
+                } else {
+                    &link.ssid
+                }
+            );
+            println!(
+                "signal:    {}",
+                link.signal_dbm
+                    .map(|dbm| format!("{dbm} dBm"))
+                    .unwrap_or_else(|| "?".to_string())
+            );
+            println!(
+                "rate:      rx {} / tx {}",
+                link.rx_bitrate_mbps
+                    .map(|v| format!("{v:.0} Mbps"))
+                    .unwrap_or_else(|| "?".to_string()),
+                link.tx_bitrate_mbps
+                    .map(|v| format!("{v:.0} Mbps"))
+                    .unwrap_or_else(|| "?".to_string())
+            );
+            println!(
+                "channel:   {} ({} MHz, {} MHz wide)",
+                link.channel
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "?".to_string()),
+                link.frequency_mhz
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "?".to_string()),
+                link.width_mhz
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "?".to_string())
+            );
+            println!(
+                "note: this is the host's own link; run `longcarctl network speedtest` to measure the device"
+            );
+        }
+        None => println!("the preferred address is not wireless (no Wi-Fi link to report)"),
+    }
+    Ok(())
+}
+
+async fn network_speedtest(stop: bool, status: bool) -> CliResult<()> {
+    let proxy = connect().await?;
+    if stop {
+        proxy.stop_speed_test().await.map_err(map_zbus)?;
+        println!("speed test listener stopped");
+        return Ok(());
+    }
+    if status {
+        let state = fetch_state(&proxy).await?;
+        let test = &state.speed_test;
+        if test.running {
+            println!("running: open {} on the device", test.url);
+            if let Some(expires) = &test.expires_at {
+                println!("expires: {expires}");
+            }
+        } else {
+            println!("not running");
+        }
+        if let (Some(down), Some(up)) = (test.download_mbps, test.upload_mbps) {
+            println!(
+                "last result: {down:.1} Mbps down / {up:.1} Mbps up{}",
+                test.measured_at
+                    .as_ref()
+                    .map(|at| format!(" ({at})"))
+                    .unwrap_or_default()
+            );
+        }
+        return Ok(());
+    }
+    let raw = proxy.start_speed_test().await.map_err(map_zbus)?;
+    let test: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|err| failed(format!("invalid speed test payload: {err}")))?;
+    let url = test["url"].as_str().unwrap_or_default();
+    println!("open this on your tablet or phone:");
+    println!("  {url}");
+    println!(
+        "it downloads {} MiB, uploads 16 MiB and reports the rates back",
+        test["payloadBytes"].as_u64().unwrap_or(0) / (1024 * 1024)
+    );
+    println!("poll with `longcarctl network speedtest --status`, stop with `--stop`");
+    Ok(())
 }
 
 fn string_array(value: &Value, key: &str) -> Vec<String> {

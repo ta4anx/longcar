@@ -10,6 +10,7 @@ pub mod notify;
 pub mod orchestrator;
 pub mod plan;
 pub mod service;
+pub mod speedtest;
 pub mod systemd;
 
 pub use orchestrator::Orchestrator;

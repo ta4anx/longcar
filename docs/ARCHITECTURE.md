@@ -21,8 +21,13 @@ GNOME virtual monitor.
 
 D-Bus control plane: bus name `io.github.ta4anx.Longcar.Daemon`, object path
 `/io/github/ta4anx/Longcar/Daemon`, interface
-`io.github.ta4anx.Longcar.Daemon.Control`, signal `StateChanged(s json)`. There is no
-network listener.
+`io.github.ta4anx.Longcar.Daemon.Control`, signal `StateChanged(s json)`.
+
+There is no persistent network listener. The one socket the daemon ever opens is the
+on-demand throughput test: it binds an ephemeral TCP port on the LAN when the user asks for
+it, serves exactly three routes behind a 32-hex token (`/`, `/payload`, `/upload`,
+`/report`), never touches the filesystem, and closes after the browser reports its result or
+after 120 s.
 
 ```mermaid
 flowchart LR
@@ -36,6 +41,15 @@ flowchart LR
   P --> M
   S -->|GameStream| C[Moonlight / Artemis]
 ```
+
+## Measuring the link to the device
+
+- The daemon reads the host's own Wi-Fi link with `iw` (SSID, signal, negotiated rx/tx rate,
+  channel and width) and publishes it as `host.wifi` when the preferred address is wireless.
+- The throughput test measures the *device's* link: the browser on the tablet downloads
+  64 MiB, uploads 16 MiB, reports both rates back, and the daemon stores the result in
+  `speedTest`. It is TCP, so a healthy number with a stuttering stream points at airtime
+  or UDP loss rather than raw bandwidth.
 
 ## One Sunshine process per screen
 

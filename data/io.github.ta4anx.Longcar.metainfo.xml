@@ -43,6 +43,11 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.0" date="2026-11-21">
+      <description>
+        <p>Network page link and throughput test: the host Wi-Fi link (SSID, signal, negotiated rates, channel) plus an on-demand LAN speed test you run from the tablet's browser.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-11-21">
       <description>
         <p>Audio page with host sinks, per-screen capture sink and host-sink restoration; per-screen keyboard, mouse and controller switches; CLI quick controls plus configuration export and import.</p>

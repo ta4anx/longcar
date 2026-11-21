@@ -38,6 +38,8 @@ pub struct StateDoc {
     pub devices: Vec<DeviceEntry>,
     pub host: HostEntry,
     #[serde(default)]
+    pub speed_test: SpeedTestStatus,
+    #[serde(default)]
     pub warnings: Vec<String>,
 }
 
@@ -53,6 +55,7 @@ impl Default for StateDoc {
             pending_pairings: Vec::new(),
             devices: Vec::new(),
             host: HostEntry::default(),
+            speed_test: SpeedTestStatus::default(),
             warnings: Vec::new(),
         }
     }
@@ -250,6 +253,31 @@ pub struct DeviceEntry {
 pub struct HostEntry {
     #[serde(default)]
     pub addresses: Vec<HostAddressEntry>,
+    /// Host Wi-Fi link state when the preferred address is wireless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wifi: Option<crate::network::WifiLink>,
+}
+
+/// On-demand LAN throughput test between this host and a client device.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeedTestStatus {
+    pub running: bool,
+    /// URL to open on the device (empty unless running).
+    pub url: String,
+    pub expires_at: Option<String>,
+    /// Last measured rates, newest result only.
+    pub download_mbps: Option<f64>,
+    pub upload_mbps: Option<f64>,
+    pub measured_at: Option<String>,
+    /// Client address or name reported by the browser.
+    pub client: Option<String>,
+    /// Size of the download payload in bytes.
+    pub payload_bytes: u64,
+    /// TCP port the listener bound (0 when not running).
+    #[serde(default)]
+    pub port: u16,
+    pub error: Option<String>,
 }
 
 /// One local address clients can reach the host on.
@@ -338,6 +366,9 @@ mod tests {
         "settings": {"autostartScreens": false, "notifications": true, "stopWhenIdleMinutes": 0, "defaultPreset": "tablet", "audioScreen": "tablet", "restoreLayoutOnStop": true, "onboardingComplete": false, "restoreHostAudio": true},
         "pendingPairings": [], "devices": [],
         "host": {"addresses": [{"interface": "wlp3s0", "address": "192.168.2.11", "kind": "wifi", "preferred": true}]},
+        "speedTest": {"running": false, "url": "", "expiresAt": null, "downloadMbps": null,
+                      "uploadMbps": null, "measuredAt": null, "client": null,
+                      "payloadBytes": 0, "port": 0, "error": null},
         "warnings": []
     }"#;
 

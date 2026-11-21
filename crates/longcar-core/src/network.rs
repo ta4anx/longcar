@@ -5,6 +5,7 @@
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
 use std::path::Path;
+use std::process::Command;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -64,6 +65,109 @@ pub struct DiscoveredHost {
     pub port: u16,
     pub addresses: Vec<String>,
     pub is_self: bool,
+}
+
+/// Host Wi-Fi link state, from `iw dev <iface> link` / `iw dev <iface> info`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WifiLink {
+    pub interface: String,
+    pub ssid: String,
+    /// Signal strength in dBm (negative; closer to 0 is better).
+    pub signal_dbm: Option<i32>,
+    /// Receiver bitrate the AP negotiated with this host, in Mbit/s.
+    pub rx_bitrate_mbps: Option<f64>,
+    /// Transmit bitrate the AP negotiated with this host, in Mbit/s.
+    pub tx_bitrate_mbps: Option<f64>,
+    pub frequency_mhz: Option<u32>,
+    pub channel: Option<u32>,
+    /// Channel width in MHz (20/40/80/160).
+    pub width_mhz: Option<u32>,
+    pub connected: bool,
+}
+
+/// Parse `iw dev <iface> link` output.
+pub fn parse_iw_link(text: &str) -> Option<WifiLink> {
+    if !text.contains("Connected to") {
+        return None;
+    }
+    let field = |name: &str| -> Option<&str> {
+        text.lines()
+            .find_map(|line| line.trim().strip_prefix(name).map(|value| value.trim()))
+    };
+    let number = |name: &str, suffix: &str| -> Option<f64> {
+        field(name)
+            .and_then(|value| value.trim_end_matches(suffix).trim().parse::<f64>().ok())
+            .or_else(|| {
+                field(name).and_then(|value| {
+                    value
+                        .split_whitespace()
+                        .next()
+                        .and_then(|first| first.parse::<f64>().ok())
+                })
+            })
+    };
+    let signal = field("signal:")
+        .and_then(|value| value.split_whitespace().next())
+        .and_then(|value| value.parse::<i32>().ok());
+    let frequency = field("freq:")
+        .and_then(|value| value.split_whitespace().next())
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| value.round() as u32);
+    Some(WifiLink {
+        interface: String::new(),
+        ssid: field("SSID:").unwrap_or_default().to_string(),
+        signal_dbm: signal,
+        rx_bitrate_mbps: number("rx bitrate:", "MBit/s"),
+        tx_bitrate_mbps: number("tx bitrate:", "MBit/s"),
+        frequency_mhz: frequency,
+        channel: None,
+        width_mhz: None,
+        connected: true,
+    })
+}
+
+/// Add channel and width from `iw dev <iface> info` (line: `channel 108 (5540 MHz), width: 80 MHz`).
+pub fn parse_iw_info(text: &str, link: &mut WifiLink) {
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("channel ") {
+            link.channel = rest
+                .split_whitespace()
+                .next()
+                .and_then(|value| value.parse::<u32>().ok());
+            if let Some(width) = rest.split("width:").nth(1) {
+                link.width_mhz = width
+                    .split_whitespace()
+                    .next()
+                    .and_then(|value| value.parse::<u32>().ok());
+            }
+        }
+        if let Some(ssid) = line.strip_prefix("ssid ")
+            && link.ssid.is_empty()
+        {
+            link.ssid = ssid.trim().to_string();
+        }
+    }
+}
+
+/// The Wi-Fi link of `interface`, if it is a connected wireless interface.
+pub fn wifi_link(interface: &str) -> Option<WifiLink> {
+    let link = Command::new("iw")
+        .args(["dev", interface, "link"])
+        .output()
+        .ok()?;
+    if !link.status.success() {
+        return None;
+    }
+    let mut parsed = parse_iw_link(&String::from_utf8_lossy(&link.stdout))?;
+    parsed.interface = interface.to_string();
+    if let Ok(info) = Command::new("iw").args(["dev", interface, "info"]).output()
+        && info.status.success()
+    {
+        parse_iw_info(&String::from_utf8_lossy(&info.stdout), &mut parsed);
+    }
+    Some(parsed)
 }
 
 /// Result of `ping_gateway`.
@@ -364,6 +468,46 @@ rtt min/avg/max/mdev = 1.902/3.456/7.123/0.987 ms
             parse_ping_output(text),
             Err(NetworkError::PingOutput)
         ));
+    }
+
+    #[test]
+    fn iw_link_output_is_parsed() {
+        let text = "Connected to 50:ff:20:2a:fa:72 (on wlp3s0)\n\
+                    \tSSID: Kaanternet Server\n\
+                    \tfreq: 5540.0\n\
+                    \tRX: 360376192 bytes (756856 packets)\n\
+                    \tTX: 2391163530 bytes (1857903 packets)\n\
+                    \tsignal: -43 dBm\n\
+                    \trx bitrate: 866.7 MBit/s VHT-MCS 9 80MHz short GI VHT-NSS 2\n\
+                    \ttx bitrate: 650.0 MBit/s VHT-MCS 7 80MHz short GI VHT-NSS 2\n";
+        let link = parse_iw_link(text).expect("connected link");
+        assert_eq!(link.ssid, "Kaanternet Server");
+        assert_eq!(link.signal_dbm, Some(-43));
+        assert_eq!(link.frequency_mhz, Some(5540));
+        assert_eq!(link.rx_bitrate_mbps, Some(866.7));
+        assert_eq!(link.tx_bitrate_mbps, Some(650.0));
+        assert!(link.connected);
+    }
+
+    #[test]
+    fn iw_info_adds_channel_and_width() {
+        let mut link = parse_iw_link(
+            "Connected to 50:ff:20:2a:fa:72 (on wlp3s0)\n\tSSID: Kaanternet Server\n",
+        )
+        .expect("connected");
+        parse_iw_info(
+            "Interface wlp3s0\n\tifindex 3\n\tssid Kaanternet Server\n\
+             \tchannel 108 (5540 MHz), width: 80 MHz, center1: 5530 MHz\n",
+            &mut link,
+        );
+        assert_eq!(link.channel, Some(108));
+        assert_eq!(link.width_mhz, Some(80));
+    }
+
+    #[test]
+    fn disconnected_link_is_none() {
+        assert!(parse_iw_link("Not connected.\n").is_none());
+        assert!(parse_iw_link("").is_none());
     }
 
     #[test]
